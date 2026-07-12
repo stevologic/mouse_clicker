@@ -1,0 +1,14 @@
+# Build output
+ClickForge.exe
+*.pdb
+
+# Generated at build time
+assets/icon.ico
+
+# Editor / OS cruft
+.vs/
+bin/
+obj/
+Thumbs.db
+desktop.ini
+*.user
