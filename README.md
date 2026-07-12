@@ -2,7 +2,7 @@
 
 **A robust, no-install Windows auto clicker with AI-generated click & movement patterns.**
 
-Tons of options for **how** to click, **where** to move the cursor, and **when** to fire — packaged as a single ~80 KB portable executable that runs on any Windows 10/11 machine with **no install and no runtime download**. Free and open source under the MIT License.
+Tons of options for **how** to click, **where** to move the cursor, and **when** to fire — wrapped in a fully animated interface and packaged as a single ~100 KB portable executable that runs on any Windows 10/11 machine with **no install and no runtime download**. Free and open source under the MIT License.
 
 🌐 **Website:** https://stevologic.github.io/mouse_clicker/ · ⬇ **[Download the latest .exe](https://github.com/stevologic/mouse_clicker/releases/latest/download/ClickForge.exe)**
 
@@ -15,7 +15,8 @@ Tons of options for **how** to click, **where** to move the cursor, and **when**
 - **Truly portable.** A single self-contained `.exe`. It runs on the .NET Framework that already ships with Windows — no installer, no admin rights, no 60 MB runtime bundle.
 - **Extremely configurable.** Every click button and type, randomized hold/interval timing, four positioning modes, and three cursor-movement styles including humanized curves.
 - **AI patterns.** Describe what you want in plain English and let Claude build the whole pattern. Works offline too.
-- **Tiny & fast.** ~80 KB, native input via the Win32 `SendInput` API, precise sub-millisecond timing.
+- **A living interface.** A hand-built animated UI — a cursor-reactive particle constellation, an aurora backdrop, glassmorphism, a glowing Start button, and live click pulses — rendered entirely in GDI+. It idles to near-zero CPU when the window isn't in the foreground.
+- **Tiny & fast.** ~100 KB, native input via the Win32 `SendInput` API, precise sub-millisecond timing.
 
 ## Features
 

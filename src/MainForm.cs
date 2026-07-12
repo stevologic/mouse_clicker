@@ -10,7 +10,7 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "ClickForge";
-        private const string AppVersion = "2.0";
+        private const string AppVersion = "2.1";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
@@ -20,11 +20,29 @@ namespace ClickForge
 
         // Layout
         private Panel _content;
-        private readonly List<Button> _navButtons = new List<Button>();
         private readonly Dictionary<string, Control> _pages = new Dictionary<string, Control>();
-        private Button _startButton;
+        private GlowButton _startButton;
         private Label _statusLabel;
         private Label _countLabel;
+        private PulsePad _pulse;
+
+        // Animation
+        private readonly Scene _scene = new Scene();
+        private Timer _anim;
+        private GlassPanel _headerGlass;
+        private GlassPanel _navGlass;
+        private AccentBar _accent;
+
+        // Nav items are drawn in the nav glass overlay (no child controls, so
+        // the animated glass shows through with no flicker).
+        private static readonly string[] NavNames = { "Click", "Timing", "Movement", "AI", "Profiles", "About" };
+        private static readonly string[] NavIcons = { "⟳", "⏱", "↗", "✦", "☰", "ⓘ" };
+        private Rectangle[] _navRects;
+        private int _navActive;
+        private int _navHover = -1;
+        private float _navPillY;
+        private float _navPillTarget;
+        private int _lastRippleTick;
 
         // Click page
         private ComboBox _buttonCombo;
@@ -99,14 +117,18 @@ namespace ClickForge
 
             Text = AppName + " — Robust Auto Clicker";
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(880, 620);
-            MinimumSize = new Size(820, 560);
+            ClientSize = new Size(900, 640);
+            MinimumSize = new Size(840, 580);
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
             Font = Theme.UiFont;
             AutoScaleMode = AutoScaleMode.Font;
+            DoubleBuffered = true;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
             try { Icon = System.Drawing.Icon.FromHandle(Theme.CreateLogo(32).GetHicon()); }
             catch { }
+
+            _scene.Resize(ClientSize.Width, ClientSize.Height);
 
             BuildHeader();
             BuildFooter();
@@ -117,52 +139,90 @@ namespace ClickForge
             LoadToControls();
             SwitchPage("Click");
 
+            _anim = new Timer();
+            _anim.Interval = 50; // ~20fps; ambient backdrop, easy on the CPU
+            _anim.Tick += AnimTick;
+            _anim.Start();
+
+            Activated += delegate { _active = true; };
+            Deactivate += delegate { _active = false; };
+
             Load += delegate { SetupHotkeys(); };
+            Resize += delegate { OnFormResized(); };
             FormClosing += OnClosing;
+        }
+
+        private bool _active = true;
+
+        // ---- Animation loop ----------------------------------------------
+
+        private void OnFormResized()
+        {
+            if (ClientSize.Width < 2 || ClientSize.Height < 2) return;
+            _scene.Resize(ClientSize.Width, ClientSize.Height);
+        }
+
+        private void AnimTick(object sender, EventArgs e)
+        {
+            // Idle to near-zero CPU when the window isn't in the foreground —
+            // important for an auto-clicker that runs while you work elsewhere.
+            if (WindowState == FormWindowState.Minimized || !_active)
+                return;
+
+            // Feed the live cursor position (anywhere over the window) to the
+            // constellation so particles react to it.
+            Point c = PointToClient(Cursor.Position);
+            bool inside = ClientRectangle.Contains(c);
+            _scene.SetCursor(c.X, c.Y, inside);
+
+            _scene.Update();
+            _scene.Render();
+
+            // Ease the nav highlight pill toward the active item.
+            _navPillY += (_navPillTarget - _navPillY) * 0.28f;
+
+            if (_headerGlass != null) _headerGlass.Invalidate();
+            if (_navGlass != null) _navGlass.Invalidate();
+            if (_accent != null) _accent.Invalidate();
+            if (_startButton != null) _startButton.Tick();
+            if (_pulse != null) _pulse.Tick();
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            // Paint the scene into any exposed form background (gutters).
+            Bitmap f = _scene.Frame;
+            if (f != null)
+                e.Graphics.DrawImage(f, 0, 0);
+            else
+                base.OnPaintBackground(e);
         }
 
         // ---- Header ------------------------------------------------------
 
         private void BuildHeader()
         {
-            Panel header = new Panel();
-            header.Dock = DockStyle.Top;
-            header.Height = 68;
-            header.BackColor = Theme.Panel;
+            _headerGlass = new GlassPanel(_scene, this);
+            _headerGlass.Dock = DockStyle.Top;
+            _headerGlass.Height = 96;
+            _headerGlass.VeilAlpha = 96;
+            _headerGlass.VeilColor = Color.FromArgb(14, 16, 24);
+            _headerGlass.Overlay = PaintHeaderOverlay;
+            Controls.Add(_headerGlass);
+        }
 
-            PictureBox logo = new PictureBox();
-            logo.Image = Theme.CreateLogo(40);
-            logo.SizeMode = PictureBoxSizeMode.Zoom;
-            logo.Size = new Size(40, 40);
-            logo.Location = new Point(20, 14);
-            logo.BackColor = Color.Transparent;
-            header.Controls.Add(logo);
+        private void PaintHeaderOverlay(Graphics g, Rectangle r)
+        {
+            LogoArt.Paint(g, new RectangleF(22, 24, 48, 48));
 
-            Label title = new Label();
-            title.Text = AppName;
-            title.Font = Theme.TitleFont;
-            title.ForeColor = Theme.Text;
-            title.AutoSize = true;
-            title.Location = new Point(72, 12);
-            title.BackColor = Color.Transparent;
-            header.Controls.Add(title);
+            TextRenderer.DrawText(g, AppName, Theme.TitleFont,
+                new Point(84, 26), Theme.Text, TextFormatFlags.NoPadding);
+            TextRenderer.DrawText(g, "Robust auto clicker  ·  AI-generated patterns", Theme.SmallFont,
+                new Point(86, 56), Theme.Muted, TextFormatFlags.NoPadding);
 
-            Label sub = new Label();
-            sub.Text = "Robust auto clicker with AI-generated patterns";
-            sub.Font = Theme.SmallFont;
-            sub.ForeColor = Theme.Muted;
-            sub.AutoSize = true;
-            sub.Location = new Point(74, 40);
-            sub.BackColor = Color.Transparent;
-            header.Controls.Add(sub);
-
-            Panel rule = new Panel();
-            rule.Dock = DockStyle.Bottom;
-            rule.Height = 1;
-            rule.BackColor = Theme.Border;
-            header.Controls.Add(rule);
-
-            Controls.Add(header);
+            // Bottom hairline.
+            using (Pen pen = new Pen(Color.FromArgb(60, 130, 150, 220)))
+                g.DrawLine(pen, 0, r.Height - 1, r.Width, r.Height - 1);
         }
 
         // ---- Footer (persistent controls) --------------------------------
@@ -171,7 +231,7 @@ namespace ClickForge
         {
             Panel footer = new Panel();
             footer.Dock = DockStyle.Bottom;
-            footer.Height = 84;
+            footer.Height = 92;
             footer.BackColor = Theme.Panel;
 
             Panel rule = new Panel();
@@ -180,21 +240,25 @@ namespace ClickForge
             rule.BackColor = Theme.Border;
             footer.Controls.Add(rule);
 
-            _startButton = new Button();
-            _startButton.Size = new Size(220, 48);
-            _startButton.Location = new Point(20, 18);
-            Theme.StylePrimaryButton(_startButton);
-            _startButton.Font = new Font("Segoe UI Semibold", 12f, FontStyle.Bold);
+            _startButton = new GlowButton();
+            _startButton.Size = new Size(210, 64);
+            _startButton.Location = new Point(18, 14);
             _startButton.Click += delegate { ToggleRun(); };
             footer.Controls.Add(_startButton);
+
+            _pulse = new PulsePad();
+            _pulse.Size = new Size(44, 44);
+            _pulse.Location = new Point(244, 24);
+            _pulse.BackColor = Theme.Panel;
+            footer.Controls.Add(_pulse);
 
             _statusLabel = new Label();
             _statusLabel.Text = "Idle";
             _statusLabel.Font = Theme.UiBold;
             _statusLabel.ForeColor = Theme.Text;
             _statusLabel.AutoSize = true;
-            _statusLabel.Location = new Point(258, 24);
-            _statusLabel.BackColor = Color.Transparent;
+            _statusLabel.Location = new Point(296, 26);
+            _statusLabel.BackColor = Theme.Panel;
             footer.Controls.Add(_statusLabel);
 
             _countLabel = new Label();
@@ -202,21 +266,21 @@ namespace ClickForge
             _countLabel.Font = Theme.SmallFont;
             _countLabel.ForeColor = Theme.Muted;
             _countLabel.AutoSize = true;
-            _countLabel.Location = new Point(258, 48);
-            _countLabel.BackColor = Color.Transparent;
+            _countLabel.Location = new Point(296, 50);
+            _countLabel.BackColor = Theme.Panel;
             footer.Controls.Add(_countLabel);
 
             Label hint = new Label();
-            hint.Text = "Global hotkeys — see Profiles tab";
+            hint.Text = "F6 start / stop   ·   F8 stop";
             hint.Font = Theme.SmallFont;
             hint.ForeColor = Theme.Muted;
             hint.AutoSize = true;
             hint.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            hint.BackColor = Color.Transparent;
+            hint.BackColor = Theme.Panel;
             footer.Controls.Add(hint);
             footer.Resize += delegate
             {
-                hint.Location = new Point(footer.Width - hint.Width - 20, 34);
+                hint.Location = new Point(footer.Width - hint.Width - 22, 38);
             };
 
             UpdateStartButton();
@@ -232,20 +296,33 @@ namespace ClickForge
             _content.BackColor = Theme.Bg;
             Controls.Add(_content);
 
-            Panel nav = new Panel();
-            nav.Dock = DockStyle.Left;
-            nav.Width = 158;
-            nav.BackColor = Theme.Panel;
-            Controls.Add(nav);
+            _navGlass = new GlassPanel(_scene, this);
+            _navGlass.Dock = DockStyle.Left;
+            _navGlass.Width = 172;
+            _navGlass.VeilAlpha = 120;
+            _navGlass.VeilColor = Color.FromArgb(15, 17, 25);
+            _navGlass.Cursor = Cursors.Hand;
+            _navGlass.Overlay = PaintNavOverlay;
+            _navGlass.MouseMove += NavMouseMove;
+            _navGlass.MouseLeave += delegate { _navHover = -1; };
+            _navGlass.MouseClick += NavMouseClick;
+            Controls.Add(_navGlass);
 
-            Panel navRule = new Panel();
-            navRule.Dock = DockStyle.Right;
-            navRule.Width = 1;
-            navRule.BackColor = Theme.Border;
-            nav.Controls.Add(navRule);
+            // Precompute the item hit-rectangles.
+            _navRects = new Rectangle[NavNames.Length];
+            int y = 20, h = 44, gap = 6;
+            for (int i = 0; i < NavNames.Length; i++)
+            {
+                _navRects[i] = new Rectangle(10, y, _navGlass.Width - 20, h);
+                y += h + gap;
+            }
+            _navPillY = _navRects[0].Y;
+            _navPillTarget = _navPillY;
 
-            string[] sections = { "Click", "Timing", "Movement", "AI", "Profiles", "About" };
-            string[] icons = { "⟳", "⏱", "↗", "✦", "☰", "ⓘ" };
+            _accent = new AccentBar();
+            _accent.Dock = DockStyle.Top;
+            _accent.Height = 2;
+            _content.Controls.Add(_accent);
 
             _pages["Click"] = BuildClickPage();
             _pages["Timing"] = BuildTimingPage();
@@ -259,29 +336,69 @@ namespace ClickForge
                 kv.Value.Visible = false;
                 _content.Controls.Add(kv.Value);
             }
+        }
 
-            int y = 16;
-            for (int i = 0; i < sections.Length; i++)
+        private void PaintNavOverlay(Graphics g, Rectangle r)
+        {
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+            // Sliding highlight pill behind the active item.
+            Rectangle pill = new Rectangle(10, (int)_navPillY, _navGlass.Width - 20, 44);
+            using (System.Drawing.Drawing2D.GraphicsPath gp = Theme.Rounded(pill, 11))
             {
-                string name = sections[i];
-                Button b = new Button();
-                b.Text = "   " + icons[i] + "   " + name;
-                b.TextAlign = ContentAlignment.MiddleLeft;
-                b.Size = new Size(150, 40);
-                b.Location = new Point(4, y);
-                b.FlatStyle = FlatStyle.Flat;
-                b.FlatAppearance.BorderSize = 0;
-                b.BackColor = Theme.Panel;
-                b.ForeColor = Theme.Muted;
-                b.Font = Theme.UiFont;
-                b.Cursor = Cursors.Hand;
-                b.Tag = name;
-                b.FlatAppearance.MouseOverBackColor = Theme.NavActive;
-                b.Click += delegate(object s, EventArgs e) { SwitchPage((string)((Button)s).Tag); };
-                nav.Controls.Add(b);
-                _navButtons.Add(b);
-                y += 44;
+                using (System.Drawing.Drawing2D.LinearGradientBrush lb =
+                    new System.Drawing.Drawing2D.LinearGradientBrush(pill,
+                        Color.FromArgb(150, 99, 130, 255), Color.FromArgb(150, 150, 110, 255), 0f))
+                    g.FillPath(lb, gp);
+                using (Pen pen = new Pen(Color.FromArgb(120, 170, 190, 255)))
+                    g.DrawPath(pen, gp);
             }
+
+            for (int i = 0; i < NavNames.Length; i++)
+            {
+                Rectangle ir = _navRects[i];
+                bool active = i == _navActive;
+                if (!active && i == _navHover)
+                {
+                    using (System.Drawing.Drawing2D.GraphicsPath gp = Theme.Rounded(ir, 11))
+                    using (SolidBrush b = new SolidBrush(Color.FromArgb(45, 150, 165, 230)))
+                        g.FillPath(b, gp);
+                }
+
+                Color fg = active ? Color.White : (i == _navHover ? Theme.Text : Theme.Muted);
+                Font f = active ? Theme.UiBold : Theme.UiFont;
+                TextRenderer.DrawText(g, NavIcons[i], Theme.UiBold,
+                    new Rectangle(ir.X + 14, ir.Y, 22, ir.Height), fg,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+                TextRenderer.DrawText(g, NavNames[i], f,
+                    new Rectangle(ir.X + 42, ir.Y, ir.Width - 46, ir.Height), fg,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+            }
+        }
+
+        private int NavHitTest(Point p)
+        {
+            if (_navRects == null) return -1;
+            for (int i = 0; i < _navRects.Length; i++)
+                if (_navRects[i].Contains(p)) return i;
+            return -1;
+        }
+
+        private void NavMouseMove(object sender, MouseEventArgs e)
+        {
+            int hit = NavHitTest(e.Location);
+            if (hit != _navHover)
+            {
+                _navHover = hit;
+                _navGlass.Invalidate();
+            }
+        }
+
+        private void NavMouseClick(object sender, MouseEventArgs e)
+        {
+            int hit = NavHitTest(e.Location);
+            if (hit >= 0)
+                SwitchPage(NavNames[hit]);
         }
 
         private void SwitchPage(string name)
@@ -292,12 +409,11 @@ namespace ClickForge
             if (_pages.TryGetValue(name, out active))
                 active.BringToFront();
 
-            foreach (Button b in _navButtons)
+            int idx = Array.IndexOf(NavNames, name);
+            if (idx >= 0)
             {
-                bool on = (string)b.Tag == name;
-                b.BackColor = on ? Theme.NavActive : Theme.Panel;
-                b.ForeColor = on ? Theme.Text : Theme.Muted;
-                b.Font = on ? Theme.UiBold : Theme.UiFont;
+                _navActive = idx;
+                _navPillTarget = _navRects[idx].Y;
             }
         }
 
@@ -871,7 +987,17 @@ namespace ClickForge
             _engine.ClickPerformed += delegate(long n)
             {
                 _clickCount = n;
-                UiInvoke(delegate { _countLabel.Text = n + (n == 1 ? " click" : " clicks"); });
+                UiInvoke(delegate
+                {
+                    _countLabel.Text = n + (n == 1 ? " click" : " clicks");
+                    // Throttle the visual ping so very high CPS stays smooth.
+                    int now = Environment.TickCount;
+                    if (_pulse != null && now - _lastRippleTick > 70)
+                    {
+                        _lastRippleTick = now;
+                        _pulse.Ping();
+                    }
+                });
             };
             _engine.Status += delegate(string s)
             {
@@ -890,18 +1016,22 @@ namespace ClickForge
 
         private void UpdateStartButton()
         {
-            if (_engine.IsRunning)
+            bool running = _engine.IsRunning;
+            _startButton.Text = running ? "■   Stop" : "▶   Start";
+            if (running)
             {
-                _startButton.Text = "■   Stop";
-                _startButton.BackColor = Theme.Danger;
-                _startButton.FlatAppearance.MouseOverBackColor = ControlPaint.Light(Theme.Danger, 0.1f);
+                _startButton.ColorA = Color.FromArgb(232, 96, 104);
+                _startButton.ColorB = Color.FromArgb(205, 62, 96);
+                _startButton.Pulsing = true;
             }
             else
             {
-                _startButton.Text = "▶   Start";
-                _startButton.BackColor = Theme.Good;
-                _startButton.FlatAppearance.MouseOverBackColor = ControlPaint.Light(Theme.Good, 0.1f);
+                _startButton.ColorA = Color.FromArgb(64, 200, 132);
+                _startButton.ColorB = Color.FromArgb(38, 168, 152);
+                _startButton.Pulsing = false;
             }
+            _startButton.Invalidate();
+            if (_pulse != null) _pulse.Active = running;
         }
 
         private void ResetIdleStatus()
@@ -1108,6 +1238,7 @@ namespace ClickForge
 
         private void OnClosing(object sender, FormClosingEventArgs e)
         {
+            if (_anim != null) _anim.Stop();
             _engine.Stop();
             try { SyncToProfile(); ProfileStore.SaveConfig(_profile); }
             catch { }
@@ -1122,6 +1253,8 @@ namespace ClickForge
             foreach (string name in names)
             {
                 SwitchPage(name);
+                _navPillY = _navPillTarget; // settle the pill for a clean still
+                for (int k = 0; k < 30; k++) { _scene.Update(); _scene.Render(); }
                 Application.DoEvents();
                 using (Bitmap bmp = new Bitmap(Width, Height))
                 {
