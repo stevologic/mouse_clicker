@@ -10,7 +10,7 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "ClickForge";
-        private const string AppVersion = "2.2";
+        private const string AppVersion = "2.3";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
@@ -768,7 +768,45 @@ namespace ClickForge
                 catch { }
             };
             s.Controls.Add(repo);
+
+            s.Controls.Add(Ui.Spacer(18));
+            s.Controls.Add(Theme.SectionHeader("Support ClickForge"));
+            s.Controls.Add(Ui.Spacer(4));
+            Label dnote = Theme.Label("Free and MIT-licensed. If it saved you time, a crypto tip is hugely appreciated.", true);
+            dnote.MaximumSize = new Size(Ui.ContentWidth, 0);
+            s.Controls.Add(dnote);
+            s.Controls.Add(Ui.Spacer(8));
+            s.Controls.Add(DonateRow("Bitcoin (BTC)", "3M9PTxL15b6c8REcHMZCVPbfMomXNZ5AGR"));
+            s.Controls.Add(DonateRow("Dogecoin (DOGE)", "DTW2M5oEW97WbmYJRM71qD7uE6xfJs1MUK"));
             return s;
+        }
+
+        private Control DonateRow(string label, string address)
+        {
+            TextBox tb = new TextBox();
+            tb.Text = address;
+            tb.ReadOnly = true;
+            tb.Width = 300;
+            tb.BackColor = Theme.PanelAlt;
+            tb.ForeColor = Theme.Text;
+            tb.BorderStyle = BorderStyle.FixedSingle;
+            tb.Font = new Font("Consolas", 9f);
+
+            Button copy = Ui.SmallButton("Copy", 70);
+            copy.Click += delegate
+            {
+                try
+                {
+                    Clipboard.SetText(address);
+                    copy.Text = "Copied!";
+                    Timer t = new Timer();
+                    t.Interval = 1200;
+                    t.Tick += delegate { copy.Text = "Copy"; t.Stop(); t.Dispose(); };
+                    t.Start();
+                }
+                catch { }
+            };
+            return Ui.RowMulti(label, tb, copy);
         }
 
         // ---- Helpers for pages -------------------------------------------

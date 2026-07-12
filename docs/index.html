@@ -166,6 +166,24 @@
   code.inline{background:var(--panel2); border:1px solid var(--border); border-radius:6px; padding:2px 7px; font-size:13px; color:var(--text)}
   pre{background:#0b0d14; border:1px solid var(--border); border-radius:12px; padding:18px; overflow:auto; font-size:13.5px; color:#cdd3e4}
 
+  /* Donate */
+  .donate-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:20px; max-width:760px; margin:0 auto}
+  .coin{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:22px; display:flex; gap:18px; align-items:center}
+  .coin .qr{background:#fff; border-radius:12px; padding:8px; width:120px; height:120px; flex:0 0 auto}
+  .coin .qr img{display:block; width:100%; height:100%}
+  .coin .info{min-width:0; flex:1}
+  .coin .head{display:flex; align-items:center; gap:9px; margin-bottom:8px}
+  .coin .sym{width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font-weight:800; font-size:14px; color:#0b0d14}
+  .coin .sym.btc{background:#f7931a}
+  .coin .sym.doge{background:#c2a633}
+  .coin .head b{font-size:16px; color:var(--text)}
+  .addr{display:flex; gap:8px; align-items:stretch}
+  .addr code{flex:1; min-width:0; overflow-x:auto; white-space:nowrap; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:9px 11px; font-size:12.5px; color:var(--text); font-family:ui-monospace,Consolas,monospace}
+  .copy-btn{flex:0 0 auto; background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:0 14px; cursor:pointer; font-size:13px; font-weight:600; transition:background .15s,border-color .15s}
+  .copy-btn:hover{background:var(--panel); border-color:var(--accent)}
+  .copy-btn.copied{background:var(--good); border-color:var(--good); color:#0b0d14}
+  @media(max-width:420px){ .coin{flex-direction:column; text-align:center} .coin .qr{width:150px; height:150px} }
+
   footer{border-top:1px solid var(--border); padding:40px 0; color:var(--muted); font-size:14px}
   footer .wrap{display:flex; justify-content:space-between; gap:20px; flex-wrap:wrap; align-items:center}
   .disclaimer{max-width:640px; margin:26px auto 0; text-align:center; color:#6d7488; font-size:12.5px}
@@ -183,6 +201,7 @@
       <a href="#features">Features</a>
       <a href="#ai">AI</a>
       <a href="#get">Get it</a>
+      <a href="#donate">Donate</a>
       <a href="https://github.com/stevologic/mouse_clicker">GitHub</a>
     </div>
   </div>
@@ -336,6 +355,36 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Run</code></pre>
   </div>
 </section>
 
+<section id="donate" class="band">
+  <div class="wrap">
+    <div class="eyebrow">Support the project</div>
+    <h2>Donate crypto</h2>
+    <p class="sub">ClickForge is free and MIT-licensed. If it saved you time, a tip is hugely appreciated — scan a code or copy an address.</p>
+    <div class="donate-grid">
+      <div class="coin">
+        <div class="qr"><img src="img/qr-btc.png" alt="Bitcoin donation QR code" loading="lazy" /></div>
+        <div class="info">
+          <div class="head"><span class="sym btc">₿</span><b>Bitcoin</b></div>
+          <div class="addr">
+            <code id="btc-addr">3M9PTxL15b6c8REcHMZCVPbfMomXNZ5AGR</code>
+            <button class="copy-btn" data-copy="btc-addr">Copy</button>
+          </div>
+        </div>
+      </div>
+      <div class="coin">
+        <div class="qr"><img src="img/qr-doge.png" alt="Dogecoin donation QR code" loading="lazy" /></div>
+        <div class="info">
+          <div class="head"><span class="sym doge">Ð</span><b>Dogecoin</b></div>
+          <div class="addr">
+            <code id="doge-addr">DTW2M5oEW97WbmYJRM71qD7uE6xfJs1MUK</code>
+            <button class="copy-btn" data-copy="doge-addr">Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <footer>
   <div class="wrap">
     <div class="brand">
@@ -410,6 +459,36 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Run</code></pre>
   });
 
   start();
+})();
+
+// Copy-to-clipboard for the donation addresses.
+(function () {
+  function fallback(text, done) {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta); done();
+  }
+  var btns = document.querySelectorAll('.copy-btn');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].addEventListener('click', function () {
+      var btn = this;
+      var el = document.getElementById(btn.getAttribute('data-copy'));
+      if (!el) return;
+      var text = el.textContent.trim();
+      function done() {
+        var old = btn.textContent;
+        btn.textContent = 'Copied!'; btn.classList.add('copied');
+        setTimeout(function () { btn.textContent = old; btn.classList.remove('copied'); }, 1400);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { fallback(text, done); });
+      } else {
+        fallback(text, done);
+      }
+    });
+  }
 })();
 </script>
 
