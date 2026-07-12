@@ -93,9 +93,14 @@ namespace ClickForge
         public int ToggleHotkeyVk { get; set; }
         public int StopHotkeyVk { get; set; }
 
-        // AI settings.
+        // AI settings. ApiKey/Model hold the *current* provider's values (what
+        // AiClient uses); the dictionaries remember each provider's key/model so
+        // switching providers doesn't lose them.
         public string ApiKey { get; set; }
         public string Model { get; set; }
+        public string Provider { get; set; }
+        public Dictionary<string, string> ProviderKeys { get; set; }
+        public Dictionary<string, string> ProviderModels { get; set; }
 
         public Profile()
         {
@@ -132,16 +137,59 @@ namespace ClickForge
 
             ApiKey = "";
             Model = "claude-opus-4-8";
+            Provider = AiProviders.Anthropic;
+            ProviderKeys = new Dictionary<string, string>();
+            ProviderModels = new Dictionary<string, string>();
         }
 
         // Guard against nonsense values (e.g. min > max) so the engine never
         // has to defend itself against a malformed profile.
+        public string GetKey(string provider)
+        {
+            string v;
+            if (ProviderKeys != null && ProviderKeys.TryGetValue(provider, out v) && v != null)
+                return v;
+            return "";
+        }
+
+        public string GetModel(string provider)
+        {
+            string v;
+            if (ProviderModels != null && ProviderModels.TryGetValue(provider, out v) && !string.IsNullOrEmpty(v))
+                return v;
+            return AiProviders.DefaultModel(provider);
+        }
+
+        public void SetKey(string provider, string key)
+        {
+            if (ProviderKeys == null) ProviderKeys = new Dictionary<string, string>();
+            ProviderKeys[provider] = key ?? "";
+        }
+
+        public void SetModel(string provider, string model)
+        {
+            if (ProviderModels == null) ProviderModels = new Dictionary<string, string>();
+            ProviderModels[provider] = model ?? "";
+        }
+
         public void Normalize()
         {
             if (Points == null)
                 Points = new List<ClickPoint>();
-            if (string.IsNullOrEmpty(Model))
-                Model = "claude-opus-4-8";
+            if (ProviderKeys == null) ProviderKeys = new Dictionary<string, string>();
+            if (ProviderModels == null) ProviderModels = new Dictionary<string, string>();
+            if (string.IsNullOrEmpty(Provider)) Provider = AiProviders.Anthropic;
+
+            // Migrate a legacy single key/model into the Anthropic slot.
+            if (!ProviderKeys.ContainsKey(AiProviders.Anthropic) && !string.IsNullOrEmpty(ApiKey))
+                ProviderKeys[AiProviders.Anthropic] = ApiKey;
+            if (!ProviderModels.ContainsKey(AiProviders.Anthropic) && !string.IsNullOrEmpty(Model)
+                && Model.StartsWith("claude"))
+                ProviderModels[AiProviders.Anthropic] = Model;
+
+            // Sync the current ApiKey/Model from the selected provider.
+            ApiKey = GetKey(Provider);
+            Model = GetModel(Provider);
 
             ClicksPerEvent = Clamp(ClicksPerEvent, 1, 10000);
             HoldMinMs = Clamp(HoldMinMs, 0, 60000);

@@ -21,20 +21,6 @@ namespace ClickForge
                 ox + pad + size * 0.06f, oy + pad,
                 size - 2 * pad - size * 0.12f, size - 2 * pad);
 
-            float breathe = 0.5f + 0.5f * (float)Math.Sin(t * 1.6);
-            float cx = body.X + body.Width / 2, cy = body.Y + body.Height / 2;
-            using (GraphicsPath gp = new GraphicsPath())
-            {
-                float gr = size * 0.6f;
-                gp.AddEllipse(cx - gr, cy - gr, gr * 2, gr * 2);
-                using (PathGradientBrush pgb = new PathGradientBrush(gp))
-                {
-                    pgb.CenterColor = Color.FromArgb((int)(80 * breathe), 120, 130, 255);
-                    pgb.SurroundColors = new Color[] { Color.FromArgb(0, 120, 130, 255) };
-                    g.FillPath(pgb, gp);
-                }
-            }
-
             using (GraphicsPath p = new GraphicsPath())
             {
                 p.AddArc(body.X, body.Y, body.Width, body.Width, 180, 180);

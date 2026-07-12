@@ -36,7 +36,9 @@ namespace ClickForge
                 _rings[i] += 0.05f;
                 if (_rings[i] >= 1f) _rings.RemoveAt(i);
             }
-            Invalidate();
+            // Only repaint when there's something to animate.
+            if (Active || _rings.Count > 0)
+                Invalidate();
         }
 
         protected override void OnPaint(PaintEventArgs e)

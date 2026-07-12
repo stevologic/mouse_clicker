@@ -22,6 +22,73 @@ namespace ClickForge
                 return;
             }
 
+            // Internal: show the live HUD (layered window) on screen and grab it.
+            //   ClickForge.exe --huddemo <outputFile>
+            if (args != null && args.Length >= 2 && args[0] == "--huddemo")
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                ClickHud h = new ClickHud();
+                h.Begin();
+                long count = 0;
+                for (int i = 0; i < 90; i++)
+                {
+                    count += 137;
+                    h.SetCount(count);
+                    if (i % 6 == 0) h.Ping();
+                    Application.DoEvents();
+                    Thread.Sleep(16);
+                }
+                using (Bitmap bmp = new Bitmap(h.Width, h.Height))
+                {
+                    using (Graphics g = Graphics.FromImage(bmp))
+                        g.CopyFromScreen(h.Location, Point.Empty, h.Size);
+                    bmp.Save(args[1]);
+                }
+                h.End();
+                return;
+            }
+
+            // Internal: preview the click HUD over a dark backdrop.
+            //   ClickForge.exe --hud <outputFile>
+            if (args != null && args.Length >= 2 && args[0] == "--hud")
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                ClickHud h = new ClickHud();
+                h.SetCount(1234);
+                h.Ping();
+                using (Bitmap fg = h.RenderBitmap())
+                using (Bitmap bg = new Bitmap(fg.Width, fg.Height))
+                using (Graphics g = Graphics.FromImage(bg))
+                {
+                    g.Clear(Color.FromArgb(36, 40, 54));
+                    g.DrawImage(fg, 0, 0);
+                    bg.Save(args[1]);
+                }
+                return;
+            }
+
+            // Internal: capture real on-screen pixels of each page (includes
+            // custom-painted controls DrawToBitmap misses).
+            //   ClickForge.exe --shot <outputDir>
+            if (args != null && args.Length >= 2 && args[0] == "--shot")
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                MainForm f = new MainForm();
+                f.StartPosition = FormStartPosition.Manual;
+                f.Location = new Point(80, 60);
+                f.TopMost = true;
+                f.Show();
+                f.BringToFront();
+                f.Activate();
+                Application.DoEvents();
+                f.CaptureAllPagesScreen(args[1]);
+                f.Close();
+                return;
+            }
+
             // Internal: render each page to PNG for visual verification.
             //   ClickForge.exe --render <outputDir>
             if (args != null && args.Length >= 2 && args[0] == "--render")

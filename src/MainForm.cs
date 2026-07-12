@@ -10,12 +10,13 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "ClickForge";
-        private const string AppVersion = "2.1";
+        private const string AppVersion = "2.2";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
         private readonly AiClient _ai = new AiClient();
         private HotkeyManager _hotkeys;
+        private ClickHud _hud;
         private long _clickCount;
 
         // Layout
@@ -75,8 +76,11 @@ namespace ClickForge
         private CheckBox _returnToOrigin;
 
         // AI page
+        private ComboBox _providerCombo;
         private TextBox _apiKey;
         private ComboBox _modelCombo;
+        private Label _keyNote;
+        private string _uiProvider;
         private TextBox _aiPrompt;
         private Button _generateButton;
         private Label _aiResult;
@@ -91,11 +95,7 @@ namespace ClickForge
         private Timer _captureTimer;
         private int _captureCountdown;
         private Action<int, int> _captureCallback;
-
-        private static readonly string[] ModelIds =
-        {
-            "claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5", "claude-opus-4-7"
-        };
+        private bool _loadingUi;
 
         // (label, virtual-key) pairs for the hotkey pickers.
         private static readonly KeyValuePair<string, int>[] HotkeyChoices =
@@ -129,10 +129,12 @@ namespace ClickForge
             catch { }
 
             _scene.Resize(ClientSize.Width, ClientSize.Height);
+            _hud = new ClickHud();
 
             BuildHeader();
             BuildFooter();
             BuildNavAndContent();
+            UpdateSceneRegions();
 
             WireEngine();
 
@@ -140,7 +142,7 @@ namespace ClickForge
             SwitchPage("Click");
 
             _anim = new Timer();
-            _anim.Interval = 50; // ~20fps; ambient backdrop, easy on the CPU
+            _anim.Interval = 42; // ~24fps — smooth for an ambient backdrop, lighter on the CPU
             _anim.Tick += AnimTick;
             _anim.Start();
 
@@ -153,6 +155,7 @@ namespace ClickForge
         }
 
         private bool _active = true;
+        private int _animFrame;
 
         // ---- Animation loop ----------------------------------------------
 
@@ -160,6 +163,19 @@ namespace ClickForge
         {
             if (ClientSize.Width < 2 || ClientSize.Height < 2) return;
             _scene.Resize(ClientSize.Width, ClientSize.Height);
+            UpdateSceneRegions();
+        }
+
+        private void UpdateSceneRegions()
+        {
+            if (_navGlass == null || _headerGlass == null) return;
+            int navW = _navGlass.Width;
+            int headH = _headerGlass.Height;
+            _scene.SetVisibleRects(new Rectangle[]
+            {
+                new Rectangle(0, 0, navW, ClientSize.Height),
+                new Rectangle(navW, 0, ClientSize.Width - navW, headH)
+            });
         }
 
         private void AnimTick(object sender, EventArgs e)
@@ -178,12 +194,19 @@ namespace ClickForge
             _scene.Update();
             _scene.Render();
 
-            // Ease the nav highlight pill toward the active item.
-            _navPillY += (_navPillTarget - _navPillY) * 0.28f;
+            // Ease the nav highlight pill toward the active item (near-instant).
+            _navPillY += (_navPillTarget - _navPillY) * 0.55f;
 
-            if (_headerGlass != null) _headerGlass.Invalidate();
+            // The nav is the main animated surface — repaint it every frame.
+            // The header/accent are secondary; repaint them less often to save
+            // the cost of recompositing their text/gradients each tick.
+            _animFrame++;
             if (_navGlass != null) _navGlass.Invalidate();
-            if (_accent != null) _accent.Invalidate();
+            if ((_animFrame & 3) == 0)
+            {
+                if (_headerGlass != null) _headerGlass.Invalidate();
+                if (_accent != null) _accent.Invalidate();
+            }
             if (_startButton != null) _startButton.Tick();
             if (_pulse != null) _pulse.Tick();
         }
@@ -336,6 +359,12 @@ namespace ClickForge
                 kv.Value.Visible = false;
                 _content.Controls.Add(kv.Value);
             }
+
+            // Dock layout processes children in reverse z-order, so the Fill
+            // panel must sit at the front (index 0) to be sized LAST — after the
+            // header/footer/nav reserve their edges. Otherwise it claims the
+            // full height and hides its top rows behind the header.
+            _content.BringToFront();
         }
 
         private void PaintNavOverlay(Graphics g, Rectangle r)
@@ -587,19 +616,33 @@ namespace ClickForge
             FlowLayoutPanel s = Ui.Stack();
             s.Controls.Add(Theme.SectionHeader("Generate a pattern with AI"));
             s.Controls.Add(Ui.Spacer(4));
-            Label blurb = Theme.Label("Describe what you want in plain English and let Claude build the pattern.", true);
+            Label blurb = Theme.Label("Describe what you want in plain English and let your chosen AI build the pattern.", true);
             blurb.MaximumSize = new Size(Ui.ContentWidth, 0);
             s.Controls.Add(blurb);
             s.Controls.Add(Ui.Spacer(10));
 
-            _apiKey = Ui.Text(360, true);
-            s.Controls.Add(Ui.Row("Anthropic API key", _apiKey));
-            Label keyNote = Theme.Label("Stored locally in %APPDATA%\\ClickForge. Sent only to api.anthropic.com. Leave blank to use the offline generator.", true);
-            keyNote.MaximumSize = new Size(Ui.ContentWidth, 0);
-            keyNote.Margin = new Padding(0, 2, 0, 8);
-            s.Controls.Add(keyNote);
+            _providerCombo = Ui.Combo(220,
+                AiProviders.Display(AiProviders.Anthropic),
+                AiProviders.Display(AiProviders.OpenAI),
+                AiProviders.Display(AiProviders.Google));
+            _providerCombo.SelectedIndexChanged += delegate { OnProviderChanged(); };
+            s.Controls.Add(Ui.Row("Provider", _providerCombo));
 
-            _modelCombo = Ui.Combo(200, "Opus 4.8 (best)", "Sonnet 5", "Haiku 4.5 (fastest)", "Opus 4.7");
+            _apiKey = Ui.Text(360, true);
+            s.Controls.Add(Ui.Row("API key", _apiKey));
+            _keyNote = Theme.Label("", true);
+            _keyNote.MaximumSize = new Size(Ui.ContentWidth, 0);
+            _keyNote.Margin = new Padding(0, 2, 0, 8);
+            s.Controls.Add(_keyNote);
+
+            // Editable so any current model id works, with per-provider suggestions.
+            _modelCombo = new ComboBox();
+            _modelCombo.Width = 220;
+            _modelCombo.DropDownStyle = ComboBoxStyle.DropDown;
+            _modelCombo.FlatStyle = FlatStyle.Flat;
+            _modelCombo.BackColor = Theme.PanelAlt;
+            _modelCombo.ForeColor = Theme.Text;
+            _modelCombo.Font = Theme.UiFont;
             s.Controls.Add(Ui.Row("Model", _modelCombo));
 
             Label describeLbl = Theme.Label("Describe what you want", false);
@@ -792,8 +835,13 @@ namespace ClickForge
             _jitter.Value = Clamp(_profile.JitterRadius, _jitter);
             _returnToOrigin.Checked = _profile.ReturnToOrigin;
 
-            _apiKey.Text = _profile.ApiKey ?? "";
-            SelectModel(_profile.Model);
+            _loadingUi = true;
+            _uiProvider = _profile.Provider;
+            _providerCombo.SelectedIndex = AiProviders.DisplayIndex(_profile.Provider);
+            PopulateModelCombo(_profile.Provider, _profile.GetModel(_profile.Provider));
+            _apiKey.Text = _profile.GetKey(_profile.Provider);
+            UpdateKeyNote(_profile.Provider);
+            _loadingUi = false;
 
             SelectHotkey(_toggleKeyCombo, _profile.ToggleHotkeyVk);
             SelectHotkey(_stopKeyCombo, _profile.StopHotkeyVk);
@@ -834,19 +882,46 @@ namespace ClickForge
             _profile.JitterRadius = (int)_jitter.Value;
             _profile.ReturnToOrigin = _returnToOrigin.Checked;
 
+            string prov = AiProviders.FromDisplayIndex(_providerCombo.SelectedIndex);
+            _profile.Provider = prov;
+            _profile.SetKey(prov, _apiKey.Text.Trim());
+            _profile.SetModel(prov, _modelCombo.Text.Trim());
             _profile.ApiKey = _apiKey.Text.Trim();
-            if (_modelCombo.SelectedIndex >= 0 && _modelCombo.SelectedIndex < ModelIds.Length)
-                _profile.Model = ModelIds[_modelCombo.SelectedIndex];
+            _profile.Model = _modelCombo.Text.Trim();
 
             _profile.ToggleHotkeyVk = SelectedVk(_toggleKeyCombo, 0x75);
             _profile.StopHotkeyVk = SelectedVk(_stopKeyCombo, 0x77);
             _profile.Normalize();
         }
 
-        private void SelectModel(string id)
+        private void OnProviderChanged()
         {
-            int idx = Array.IndexOf(ModelIds, id);
-            _modelCombo.SelectedIndex = idx >= 0 ? idx : 0;
+            if (_loadingUi) return;
+            // Remember what the user typed under the provider we were showing.
+            if (!string.IsNullOrEmpty(_uiProvider))
+            {
+                _profile.SetKey(_uiProvider, _apiKey.Text.Trim());
+                _profile.SetModel(_uiProvider, _modelCombo.Text.Trim());
+            }
+            string prov = AiProviders.FromDisplayIndex(_providerCombo.SelectedIndex);
+            _uiProvider = prov;
+            _profile.Provider = prov;
+            PopulateModelCombo(prov, _profile.GetModel(prov));
+            _apiKey.Text = _profile.GetKey(prov);
+            UpdateKeyNote(prov);
+        }
+
+        private void PopulateModelCombo(string provider, string model)
+        {
+            _modelCombo.Items.Clear();
+            _modelCombo.Items.AddRange(AiProviders.Models(provider));
+            _modelCombo.Text = model;
+        }
+
+        private void UpdateKeyNote(string provider)
+        {
+            _keyNote.Text = "Get a key at " + AiProviders.KeyHint(provider)
+                + ". Stored locally in %APPDATA%\\ClickForge. Leave blank to use the offline generator.";
         }
 
         private void SelectHotkey(ComboBox cb, int vk)
@@ -980,6 +1055,7 @@ namespace ClickForge
             _statusLabel.ForeColor = Theme.Accent;
             _engine.Start(_profile);
             UpdateStartButton();
+            if (_hud != null) _hud.Begin();
         }
 
         private void WireEngine()
@@ -990,12 +1066,14 @@ namespace ClickForge
                 UiInvoke(delegate
                 {
                     _countLabel.Text = n + (n == 1 ? " click" : " clicks");
-                    // Throttle the visual ping so very high CPS stays smooth.
+                    if (_hud != null) _hud.SetCount(n);
+                    // Throttle the visual pings so very high CPS stays smooth.
                     int now = Environment.TickCount;
-                    if (_pulse != null && now - _lastRippleTick > 70)
+                    if (now - _lastRippleTick > 70)
                     {
                         _lastRippleTick = now;
-                        _pulse.Ping();
+                        if (_pulse != null) _pulse.Ping();
+                        if (_hud != null) _hud.Ping();
                     }
                 });
             };
@@ -1010,6 +1088,7 @@ namespace ClickForge
                     _statusLabel.ForeColor = reason.StartsWith("Error") ? Theme.Danger : Theme.Muted;
                     _statusLabel.Text = reason;
                     UpdateStartButton();
+                    if (_hud != null) _hud.End();
                 });
             };
         }
@@ -1239,10 +1318,37 @@ namespace ClickForge
         private void OnClosing(object sender, FormClosingEventArgs e)
         {
             if (_anim != null) _anim.Stop();
+            if (_hud != null) { try { _hud.End(); _hud.Dispose(); } catch { } }
             _engine.Stop();
             try { SyncToProfile(); ProfileStore.SaveConfig(_profile); }
             catch { }
             if (_hotkeys != null) _hotkeys.Unregister();
+        }
+
+        // Captures the real on-screen pixels of every page (works for the
+        // custom-painted footer/Start button that DrawToBitmap misses).
+        public void CaptureAllPagesScreen(string dir)
+        {
+            Directory.CreateDirectory(dir);
+            _active = true;
+            string[] names = { "Click", "Timing", "Movement", "AI", "Profiles", "About" };
+            foreach (string name in names)
+            {
+                SwitchPage(name);
+                _navPillY = _navPillTarget;
+                for (int k = 0; k < 30; k++)
+                {
+                    Application.DoEvents();
+                    System.Threading.Thread.Sleep(16);
+                }
+                Rectangle b = Bounds;
+                using (Bitmap bmp = new Bitmap(b.Width, b.Height))
+                {
+                    using (Graphics g = Graphics.FromImage(bmp))
+                        g.CopyFromScreen(b.Location, Point.Empty, b.Size);
+                    bmp.Save(Path.Combine(dir, name + ".png"), ImageFormat.Png);
+                }
+            }
         }
 
         // Renders every page to a PNG for headless visual verification.

@@ -14,8 +14,9 @@ Tons of options for **how** to click, **where** to move the cursor, and **when**
 
 - **Truly portable.** A single self-contained `.exe`. It runs on the .NET Framework that already ships with Windows — no installer, no admin rights, no 60 MB runtime bundle.
 - **Extremely configurable.** Every click button and type, randomized hold/interval timing, four positioning modes, and three cursor-movement styles including humanized curves.
-- **AI patterns.** Describe what you want in plain English and let Claude build the whole pattern. Works offline too.
-- **A living interface.** A hand-built animated UI — a cursor-reactive particle constellation, an aurora backdrop, glassmorphism, a glowing Start button, and live click pulses — rendered entirely in GDI+. It idles to near-zero CPU when the window isn't in the foreground.
+- **AI patterns, your choice of model.** Describe what you want in plain English and let **Claude, OpenAI, or Gemini** build the whole pattern (with your own key). Works offline too.
+- **Live activity HUD.** While a run is active, a sleek floating popup shows a pulsing indicator and a live click counter — always on top and click-through, so it never gets in the way.
+- **A living interface.** A hand-built animated UI — a cursor-reactive particle constellation, an aurora backdrop, glassmorphism, and a glowing Start button — rendered entirely in GDI+. It idles to near-zero CPU when the window isn't in the foreground.
 - **Tiny & fast.** ~100 KB, native input via the Win32 `SendInput` API, precise sub-millisecond timing.
 
 ## Features
@@ -48,7 +49,7 @@ Type a description like:
 
 > *"Click like a human every 1–3 seconds near the center of the screen, with slight random movement, for 5 minutes."*
 
-…and ClickForge asks **Claude** (via your own Anthropic API key) to translate it into a precise, ready-to-run pattern. No key? A built-in **offline generator** and one-click **presets** (rapid fire, human idle jiggle, gentle clicks, region spray, double-click spam) have you covered. Your key is stored locally under `%APPDATA%\ClickForge` and sent only to `api.anthropic.com`.
+…pick your provider — **Claude (Anthropic), OpenAI, or Gemini (Google)** — and ClickForge uses your own API key to translate it into a precise, ready-to-run pattern. The model field is editable, so any current model id works. No key? A built-in **offline generator** and one-click **presets** (rapid fire, human idle jiggle, gentle clicks, region spray, double-click spam) have you covered. Keys are stored locally under `%APPDATA%\ClickForge` and sent only to the provider you choose.
 
 ## Get started
 
@@ -76,7 +77,8 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Run
 | Movement | `SetCursorPos` stepped along cubic Bézier paths with smootherstep easing |
 | Timing | `Stopwatch`-based precision sleep blended with coarse sleep |
 | Hotkeys | `RegisterHotKey` + `WM_HOTKEY`, handled in the form's `WndProc` |
-| AI | Anthropic Messages API (`claude-opus-4-8` by default) over HTTPS, with an offline heuristic fallback |
+| AI | Anthropic / OpenAI / Google APIs over HTTPS (your key, your provider), with an offline heuristic fallback |
+| Activity HUD | Topmost per-pixel-alpha layered window (`UpdateLayeredWindow`), click-through |
 | UI | Hand-built dark-themed WinForms — owner-drawn combos, no designer files |
 | Persistence | JSON profiles under `%APPDATA%\ClickForge` |
 

@@ -25,9 +25,8 @@ namespace ClickForge
             Radius = 12;
             SetStyle(ControlStyles.OptimizedDoubleBuffer
                    | ControlStyles.AllPaintingInWmPaint
-                   | ControlStyles.UserPaint
-                   | ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
+                   | ControlStyles.UserPaint, true);
+            BackColor = Theme.Panel;
             ForeColor = Color.White;
             FlatStyle = FlatStyle.Flat;
             FlatAppearance.BorderSize = 0;
@@ -50,6 +49,7 @@ namespace ClickForge
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
+            g.Clear(BackColor); // match the parent so there's no dark box
             g.SmoothingMode = SmoothingMode.AntiAlias;
             Rectangle full = ClientRectangle;
 
