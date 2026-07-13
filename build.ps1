@@ -1,7 +1,7 @@
 <#
-    build.ps1 — compiles ClickForge into a single portable .exe using the
+    build.ps1 — compiles mouseclicker.app into a single portable .exe using the
     .NET Framework C# compiler that ships with Windows. No SDK, no NuGet,
-    no runtime download. Output: ClickForge.exe (runs on any Win10/11).
+    no runtime download. Output: MouseClicker.exe (runs on any Win10/11).
 
     Usage:   powershell -ExecutionPolicy Bypass -File build.ps1
              powershell -ExecutionPolicy Bypass -File build.ps1 -Run
@@ -75,7 +75,7 @@ if (-not (Test-Path $iconPath)) {
 $src = Get-ChildItem -Path (Join-Path $root 'src') -Filter *.cs -Recurse | ForEach-Object { $_.FullName }
 if (-not $src) { Write-Error "No source files found in src\"; exit 1 }
 
-$out = Join-Path $root 'ClickForge.exe'
+$out = Join-Path $root 'MouseClicker.exe'
 $manifest = Join-Path $assets 'app.manifest'
 
 $refs = @(
@@ -108,7 +108,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $sizeKb = [math]::Round((Get-Item $out).Length / 1KB, 1)
-Write-Host "Build succeeded -> ClickForge.exe ($sizeKb KB)" -ForegroundColor Green
+Write-Host "Build succeeded -> MouseClicker.exe ($sizeKb KB)" -ForegroundColor Green
 
 if ($Run) {
     Write-Host "Launching..." -ForegroundColor DarkGray

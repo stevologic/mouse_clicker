@@ -1,12 +1,12 @@
-# ClickForge
+# mouseclicker.app
 
 **A robust, no-install Windows auto clicker with AI-generated click & movement patterns.**
 
 Tons of options for **how** to click, **where** to move the cursor, and **when** to fire — wrapped in a fully animated interface and packaged as a single ~100 KB portable executable that runs on any Windows 10/11 machine with **no install and no runtime download**. Free and open source under the MIT License.
 
-🌐 **Website:** https://stevologic.github.io/mouse_clicker/ · ⬇ **[Download the latest .exe](https://github.com/stevologic/mouse_clicker/releases/latest/download/ClickForge.exe)**
+🌐 **Website:** https://mouseclicker.app · ⬇ **[Download the latest .exe](https://github.com/stevologic/mouse_clicker/releases/latest/download/MouseClicker.exe)**
 
-![ClickForge](docs/img/screenshot-click.png)
+![mouseclicker.app](docs/img/screenshot-click.png)
 
 ---
 
@@ -49,16 +49,16 @@ Type a description like:
 
 > *"Click like a human every 1–3 seconds near the center of the screen, with slight random movement, for 5 minutes."*
 
-…pick your provider — **Claude (Anthropic), OpenAI, Gemini (Google), or a local model** — and ClickForge translates it into a precise, ready-to-run pattern. The model field is editable, so any current model id works.
+…pick your provider — **Claude (Anthropic), OpenAI, Gemini (Google), or a local model** — and mouseclicker.app translates it into a precise, ready-to-run pattern. The model field is editable, so any current model id works.
 
 - **Local, no key, no cloud:** select **Local (Ollama)** to run a lightweight model right on your machine. Install [Ollama](https://ollama.com), pull a tiny model (e.g. `ollama pull qwen2.5:0.5b`, ~400 MB), and generate patterns fully offline. Leave the key field blank for `http://localhost:11434` or point it at a custom server.
-- **Cloud:** enter your own API key for Claude, OpenAI, or Gemini. Keys are stored locally under `%APPDATA%\ClickForge` and sent only to the provider you choose.
+- **Cloud:** enter your own API key for Claude, OpenAI, or Gemini. Keys are stored locally under `%APPDATA%\MouseClicker` and sent only to the provider you choose.
 - **No key or model at all?** A built-in **offline generator** and one-click **presets** (rapid fire, human idle jiggle, gentle clicks, region spray, double-click spam) have you covered.
 
 ## Get started
 
 ### Download & run
-1. Download [`ClickForge.exe`](https://github.com/stevologic/mouse_clicker/releases/latest/download/ClickForge.exe).
+1. Download [`MouseClicker.exe`](https://github.com/stevologic/mouse_clicker/releases/latest/download/MouseClicker.exe).
 2. Double-click it. That's it — no install.
 3. Configure your options (or open the **AI** tab and describe what you want), then press **F6** to start/stop from anywhere.
 
@@ -71,7 +71,7 @@ cd mouse_clicker
 powershell -ExecutionPolicy Bypass -File build.ps1 -Run
 ```
 
-`build.ps1` locates the Framework `csc.exe`, generates the app icon, and compiles everything in `src/` into `ClickForge.exe`. Or just run [`run.bat`](run.bat).
+`build.ps1` locates the Framework `csc.exe`, generates the app icon, and compiles everything in `src/` into `MouseClicker.exe`. Or just run [`run.bat`](run.bat).
 
 ## How it works
 
@@ -84,7 +84,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Run
 | AI | Anthropic / OpenAI / Google APIs, or a local model via the Ollama HTTP API (`localhost:11434`), with an offline heuristic fallback |
 | Activity HUD | Topmost per-pixel-alpha layered window (`UpdateLayeredWindow`), click-through |
 | UI | Hand-built dark-themed WinForms — owner-drawn combos, no designer files |
-| Persistence | JSON profiles under `%APPDATA%\ClickForge` |
+| Persistence | JSON profiles under `%APPDATA%\MouseClicker` |
 
 The whole app is plain C# targeting .NET Framework 4.x, compiled with the in-box `csc.exe`. See [`src/`](src/).
 
@@ -97,7 +97,7 @@ The whole app is plain C# targeting .NET Framework 4.x, compiled with the in-box
 
 When you first run the download, Windows may show **“Windows protected your PC — Microsoft Defender SmartScreen prevented an unrecognized app from starting.”**
 
-**This is not a virus warning.** Microsoft Defender does *not* flag ClickForge as malware — a Defender scan comes back clean. SmartScreen shows this prompt for any executable that is **unsigned** and doesn’t yet have download “reputation.” Code-signing certificates cost money each year, and this is a free, open-source hobby project, so the release build isn’t signed (yet).
+**This is not a virus warning.** Microsoft Defender does *not* flag mouseclicker.app as malware — a Defender scan comes back clean. SmartScreen shows this prompt for any executable that is **unsigned** and doesn’t yet have download “reputation.” Code-signing certificates cost money each year, and this is a free, open-source hobby project, so the release build isn’t signed (yet).
 
 You have a few options, from most to least cautious:
 
@@ -109,9 +109,9 @@ You have a few options, from most to least cautious:
    ```
 2. **Verify the download, then run it.** Every release lists a **SHA-256** checksum. Confirm your download matches before running:
    ```powershell
-   Get-FileHash .\ClickForge.exe -Algorithm SHA256
+   Get-FileHash .\MouseClicker.exe -Algorithm SHA256
    ```
-3. **Run past the prompt.** On the SmartScreen dialog, click **More info → Run anyway**. (Or right-click `ClickForge.exe` → **Properties** → tick **Unblock** → **OK** before launching.)
+3. **Run past the prompt.** On the SmartScreen dialog, click **More info → Run anyway**. (Or right-click `MouseClicker.exe` → **Properties** → tick **Unblock** → **OK** before launching.)
 
 Because it’s an auto-clicker (it synthesizes mouse input), some **third-party** antivirus tools may heuristically label it a “PUA/auto-clicker.” It only does what you configure — the full source is here to audit, and any detection can be reported to your vendor as a false positive.
 
@@ -119,7 +119,7 @@ Because it’s an auto-clicker (it synthesizes mouse input), some **third-party*
 
 ## Responsible use
 
-ClickForge is a general-purpose desktop automation tool. Use it responsibly and only where automated input is permitted — **many games and online services prohibit automation**. It is not a cheat. Provided as-is under the MIT License, with no warranty.
+mouseclicker.app is a general-purpose desktop automation tool. Use it responsibly and only where automated input is permitted — **many games and online services prohibit automation**. It is not a cheat. Provided as-is under the MIT License, with no warranty.
 
 ## License
 

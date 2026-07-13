@@ -5,7 +5,7 @@ using System.Web.Script.Serialization;
 namespace ClickForge
 {
     // Persists the working profile and named presets under
-    // %APPDATA%\ClickForge. All JSON; portable and human-readable.
+    // %APPDATA%\MouseClicker. All JSON; portable and human-readable.
     internal static class ProfileStore
     {
         private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
@@ -13,7 +13,21 @@ namespace ClickForge
         public static string Folder()
         {
             string root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string dir = Path.Combine(root, "ClickForge");
+            string dir = Path.Combine(root, "MouseClicker");
+
+            // One-time migration: earlier builds stored settings under
+            // %APPDATA%\ClickForge. If the new folder doesn't exist yet but the
+            // legacy one does, move it across so saved profiles aren't lost.
+            if (!Directory.Exists(dir))
+            {
+                string legacy = Path.Combine(root, "ClickForge");
+                if (Directory.Exists(legacy))
+                {
+                    try { Directory.Move(legacy, dir); }
+                    catch { }
+                }
+            }
+
             Directory.CreateDirectory(dir);
             return dir;
         }

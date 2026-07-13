@@ -9,8 +9,8 @@ namespace ClickForge
 {
     public class MainForm : Form
     {
-        private const string AppName = "ClickForge";
-        private const string AppVersion = "2.7";
+        private const string AppName = "mouseclicker.app";
+        private const string AppVersion = "2.8";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
@@ -750,7 +750,7 @@ namespace ClickForge
             _stopKeyCombo = HotkeyCombo();
             _stopKeyCombo.SelectedIndexChanged += delegate { ApplyHotkeysFromUi(); };
             s.Controls.Add(Ui.Row("Emergency stop", _stopKeyCombo));
-            Label hkNote = Theme.Label("Hotkeys work even when ClickForge is in the background.", true);
+            Label hkNote = Theme.Label("Hotkeys work even when " + AppName + " is in the background.", true);
             s.Controls.Add(Ui.Row("", hkNote));
             return s;
         }
@@ -775,8 +775,8 @@ namespace ClickForge
                 "Free and open source under the MIT License.",
                 "",
                 "Use responsibly and only where automated input is allowed. Many games and",
-                "online services prohibit automation; ClickForge is a general desktop tool,",
-                "not a cheat.",
+                "online services prohibit automation; mouseclicker.app is a general desktop",
+                "tool, not a cheat.",
             };
             foreach (string line in lines)
             {
@@ -786,6 +786,19 @@ namespace ClickForge
             }
 
             s.Controls.Add(Ui.Spacer(10));
+            LinkLabel site = new LinkLabel();
+            site.Text = "mouseclicker.app";
+            site.LinkColor = Theme.Accent;
+            site.ActiveLinkColor = Theme.Text;
+            site.AutoSize = true;
+            site.BackColor = Color.Transparent;
+            site.LinkClicked += delegate
+            {
+                try { System.Diagnostics.Process.Start("https://mouseclicker.app"); }
+                catch { }
+            };
+            s.Controls.Add(site);
+
             LinkLabel repo = new LinkLabel();
             repo.Text = "github.com/stevologic/mouse_clicker";
             repo.LinkColor = Theme.Accent;
@@ -800,7 +813,7 @@ namespace ClickForge
             s.Controls.Add(repo);
 
             s.Controls.Add(Ui.Spacer(18));
-            s.Controls.Add(Theme.SectionHeader("Support ClickForge"));
+            s.Controls.Add(Theme.SectionHeader("Support mouseclicker.app"));
             s.Controls.Add(Ui.Spacer(4));
             Label dnote = Theme.Label("Free and MIT-licensed. If it saved you time, a crypto tip is hugely appreciated.", true);
             dnote.MaximumSize = new Size(Ui.ContentWidth, 0);
@@ -1002,7 +1015,7 @@ namespace ClickForge
                     + "Use \"Detect models\" / \"Download model\" below to manage models right here.";
             else
                 _keyNote.Text = "Get a key at " + AiProviders.KeyHint(provider)
-                    + ". Stored locally in %APPDATA%\\ClickForge. Leave blank to use the offline generator.";
+                    + ". Stored locally in %APPDATA%\\MouseClicker. Leave blank to use the offline generator.";
         }
 
         // ---- Local (Ollama) model management -----------------------------

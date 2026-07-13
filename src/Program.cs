@@ -15,7 +15,7 @@ namespace ClickForge
             NativeMethods.EnableHighDpi();
 
             // Internal: validate the core input plumbing, write results to a file.
-            //   ClickForge.exe --selftest <outputFile>
+            //   MouseClicker.exe --selftest <outputFile>
             if (args != null && args.Length >= 2 && args[0] == "--selftest")
             {
                 RunSelfTest(args[1]);
@@ -23,7 +23,7 @@ namespace ClickForge
             }
 
             // Internal: show the live HUD (layered window) on screen and grab it.
-            //   ClickForge.exe --huddemo <outputFile>
+            //   MouseClicker.exe --huddemo <outputFile>
             if (args != null && args.Length >= 2 && args[0] == "--huddemo")
             {
                 Application.EnableVisualStyles();
@@ -50,7 +50,7 @@ namespace ClickForge
             }
 
             // Internal: preview the click HUD over a dark backdrop.
-            //   ClickForge.exe --hud <outputFile>
+            //   MouseClicker.exe --hud <outputFile>
             if (args != null && args.Length >= 2 && args[0] == "--hud")
             {
                 Application.EnableVisualStyles();
@@ -71,7 +71,7 @@ namespace ClickForge
 
             // Internal: capture real on-screen pixels of each page (includes
             // custom-painted controls DrawToBitmap misses).
-            //   ClickForge.exe --shot <outputDir>
+            //   MouseClicker.exe --shot <outputDir>
             if (args != null && args.Length >= 2 && args[0] == "--shot")
             {
                 Application.EnableVisualStyles();
@@ -90,7 +90,7 @@ namespace ClickForge
             }
 
             // Internal: render each page to PNG for visual verification.
-            //   ClickForge.exe --render <outputDir>
+            //   MouseClicker.exe --render <outputDir>
             if (args != null && args.Length >= 2 && args[0] == "--render")
             {
                 Application.EnableVisualStyles();
@@ -112,7 +112,7 @@ namespace ClickForge
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            // Single instance: if ClickForge is already up, just exit quietly.
+            // Single instance: if the app is already up, just exit quietly.
             bool createdNew;
             using (Mutex mutex = new Mutex(true, "ClickForge_SingleInstance_Mutex", out createdNew))
             {
@@ -122,7 +122,7 @@ namespace ClickForge
                 Application.ThreadException += delegate(object s, ThreadExceptionEventArgs e)
                 {
                     MessageBox.Show("Unexpected error: " + e.Exception.Message,
-                        "ClickForge", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        "mouseclicker.app", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 };
 
                 Application.Run(new MainForm());
