@@ -355,6 +355,29 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Run</code></pre>
   </div>
 </section>
 
+<section id="safety">
+  <div class="wrap">
+    <div class="eyebrow">Trust &amp; safety</div>
+    <h2>“Windows protected your PC”?</h2>
+    <p class="sub">That SmartScreen prompt is <b>not a virus warning</b> — Microsoft Defender scans ClickForge clean. It shows up for any <i>unsigned</i> app that hasn't built download reputation yet (signing certificates cost money; this is a free, open-source project). Here's how to run it with confidence:</p>
+    <div class="steps">
+      <div class="step">
+        <h3>Build it yourself</h3>
+        <p>The full source is here and compiles with the C# compiler already in Windows. A locally built exe shows <b>no prompt at all</b>. See <a href="#get">Get started</a>.</p>
+      </div>
+      <div class="step">
+        <h3>Verify the download</h3>
+        <p>Every <a href="https://github.com/stevologic/mouse_clicker/releases">release</a> lists a SHA-256. Check it: <code class="inline">Get-FileHash .\ClickForge.exe -Algorithm SHA256</code>.</p>
+      </div>
+      <div class="step">
+        <h3>Run past the prompt</h3>
+        <p>Click <b>More info → Run anyway</b>, or right-click the exe → <b>Properties</b> → tick <b>Unblock</b> → <b>OK</b>.</p>
+      </div>
+    </div>
+    <p class="sub" style="margin-top:34px; margin-bottom:0">Because it synthesizes mouse input, some third-party antivirus tools may heuristically call it a “PUA / auto-clicker.” It only does what you configure — the source is public to audit, and any detection can be reported to your vendor as a false positive.</p>
+  </div>
+</section>
+
 <section id="donate" class="band">
   <div class="wrap">
     <div class="eyebrow">Support the project</div>

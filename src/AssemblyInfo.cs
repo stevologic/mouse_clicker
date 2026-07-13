@@ -1,0 +1,17 @@
+using System.Reflection;
+using System.Runtime.InteropServices;
+
+// Embeds a proper Win32 version resource (Explorer → Properties → Details)
+// so the executable identifies itself instead of showing blank metadata —
+// blank version info is a red flag to SmartScreen and to users.
+[assembly: AssemblyTitle("ClickForge")]
+[assembly: AssemblyDescription("Robust Windows auto clicker with AI-generated click patterns")]
+[assembly: AssemblyConfiguration("Release")]
+[assembly: AssemblyCompany("stevologic")]
+[assembly: AssemblyProduct("ClickForge")]
+[assembly: AssemblyCopyright("Copyright (c) 2021-2026 stevologic  -  MIT License")]
+[assembly: AssemblyTrademark("")]
+[assembly: ComVisible(false)]
+[assembly: AssemblyVersion("2.5.0.0")]
+[assembly: AssemblyFileVersion("2.5.0.0")]
+[assembly: AssemblyInformationalVersion("2.5.0 - https://github.com/stevologic/mouse_clicker")]

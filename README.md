@@ -91,7 +91,31 @@ The whole app is plain C# targeting .NET Framework 4.x, compiled with the in-box
 ## Requirements
 
 - Windows 10 or 11 (.NET Framework 4.x is preinstalled)
-- An Anthropic API key **only** if you want live AI generation (optional)
+- An API key **only** if you want live cloud AI generation (optional) — or run a local model, or use the offline generator
+
+## Is it safe? (Windows SmartScreen)
+
+When you first run the download, Windows may show **“Windows protected your PC — Microsoft Defender SmartScreen prevented an unrecognized app from starting.”**
+
+**This is not a virus warning.** Microsoft Defender does *not* flag ClickForge as malware — a Defender scan comes back clean. SmartScreen shows this prompt for any executable that is **unsigned** and doesn’t yet have download “reputation.” Code-signing certificates cost money each year, and this is a free, open-source hobby project, so the release build isn’t signed (yet).
+
+You have a few options, from most to least cautious:
+
+1. **Build it yourself.** The source is all here and it compiles with the C# compiler already in Windows — no SDK needed. A locally built exe carries no “mark of the web,” so there’s **no SmartScreen prompt at all**:
+   ```powershell
+   git clone https://github.com/stevologic/mouse_clicker
+   cd mouse_clicker
+   powershell -ExecutionPolicy Bypass -File build.ps1 -Run
+   ```
+2. **Verify the download, then run it.** Every release lists a **SHA-256** checksum. Confirm your download matches before running:
+   ```powershell
+   Get-FileHash .\ClickForge.exe -Algorithm SHA256
+   ```
+3. **Run past the prompt.** On the SmartScreen dialog, click **More info → Run anyway**. (Or right-click `ClickForge.exe` → **Properties** → tick **Unblock** → **OK** before launching.)
+
+Because it’s an auto-clicker (it synthesizes mouse input), some **third-party** antivirus tools may heuristically label it a “PUA/auto-clicker.” It only does what you configure — the full source is here to audit, and any detection can be reported to your vendor as a false positive.
+
+> The only way to remove the SmartScreen prompt entirely is to sign the build with a trusted (ideally EV) code-signing certificate. If you’d like to sponsor/provide one, the signing step is easy to add to `build.ps1`.
 
 ## Responsible use
 
