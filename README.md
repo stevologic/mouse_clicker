@@ -104,6 +104,13 @@ The whole app is plain C# targeting .NET Framework 4.x, compiled with the in-box
 - Windows 10 or 11 (.NET Framework 4.x is preinstalled)
 - An API key **only** if you want live cloud AI generation (optional) — or run a local model, or use the offline generator
 
+## Uninstalling
+
+mouseclicker.app is a single portable executable — nothing is installed system-wide (no registry keys, no services). To remove it completely:
+
+1. Delete `MouseClicker.exe`.
+2. *(Optional)* Delete the settings folder `%APPDATA%\MouseClicker`.
+
 ## Is it safe? (Windows SmartScreen)
 
 When you first run the download, Windows may show **“Windows protected your PC — Microsoft Defender SmartScreen prevented an unrecognized app from starting.”**

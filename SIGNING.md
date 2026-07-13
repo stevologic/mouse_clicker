@@ -134,6 +134,8 @@ Copy these into the application form at <https://signpath.io/open-source>.
 - **License:** MIT (OSI-approved)
 - **Language / build:** C# / .NET Framework WinForms, built in GitHub Actions on
   `windows-latest` via `build.ps1`; single portable ~130 KB `MouseClicker.exe`.
+- **Code signing policy:** https://github.com/stevologic/mouse_clicker/blob/main/CODE_SIGNING_POLICY.md
+- **MFA:** enabled on GitHub (and will be on SignPath) — required by the program.
 
 **Project description:**
 > mouseclicker.app is a free, open-source, no-install Windows auto clicker. It
