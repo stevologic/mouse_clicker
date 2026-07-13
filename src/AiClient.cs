@@ -38,14 +38,16 @@ namespace ClickForge
             string key = current.ApiKey;
             string model = string.IsNullOrEmpty(current.Model) ? AiProviders.DefaultModel(provider) : current.Model;
 
-            if (string.IsNullOrEmpty(key))
+            // Cloud providers need a key; the local (Ollama) provider does not.
+            if (!AiProviders.IsLocal(provider) && string.IsNullOrEmpty(key))
                 return OfflineFallback(prompt, "No API key set — used the built-in offline generator.");
 
             try
             {
                 using (var http = new HttpClient())
                 {
-                    http.Timeout = TimeSpan.FromSeconds(60);
+                    // Local models can be slow to load into memory on first use.
+                    http.Timeout = TimeSpan.FromSeconds(AiProviders.IsLocal(provider) ? 180 : 60);
                     using (HttpRequestMessage req = BuildRequest(provider, model, key, prompt, current))
                     {
                         HttpResponseMessage resp = await http.SendAsync(req).ConfigureAwait(false);
@@ -89,6 +91,27 @@ namespace ClickForge
             var vs = ScreenInfo.Virtual();
             var pr = ScreenInfo.Primary();
             string system = SystemPrompt(vs, pr);
+
+            if (provider == AiProviders.Local)
+            {
+                // Ollama running on the user's machine. The key field, if set,
+                // is an optional custom server URL.
+                string baseUrl = string.IsNullOrEmpty(key) ? AiProviders.DefaultOllamaUrl : key.Trim().TrimEnd('/');
+                var opts = new Dictionary<string, object>();
+                opts["num_predict"] = 512;
+                opts["temperature"] = 0.3;
+
+                var body = new Dictionary<string, object>();
+                body["model"] = model;
+                body["messages"] = new object[] { Msg("system", system), Msg("user", prompt) };
+                body["stream"] = false;
+                body["format"] = "json"; // Ollama constrains output to valid JSON
+                body["options"] = opts;
+
+                var req = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/api/chat");
+                req.Content = JsonContent(body);
+                return req;
+            }
 
             if (provider == AiProviders.OpenAI)
             {
@@ -172,6 +195,17 @@ namespace ClickForge
         {
             var root = _json.DeserializeObject(respText) as IDictionary<string, object>;
             if (root == null) return null;
+
+            if (provider == AiProviders.Local)
+            {
+                var message = Get(root, "message") as IDictionary<string, object>;
+                if (message != null)
+                {
+                    object content = Get(message, "content");
+                    if (content != null) return content.ToString();
+                }
+                return null;
+            }
 
             if (provider == AiProviders.OpenAI)
             {

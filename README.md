@@ -14,7 +14,7 @@ Tons of options for **how** to click, **where** to move the cursor, and **when**
 
 - **Truly portable.** A single self-contained `.exe`. It runs on the .NET Framework that already ships with Windows — no installer, no admin rights, no 60 MB runtime bundle.
 - **Extremely configurable.** Every click button and type, randomized hold/interval timing, four positioning modes, and three cursor-movement styles including humanized curves.
-- **AI patterns, your choice of model.** Describe what you want in plain English and let **Claude, OpenAI, or Gemini** build the whole pattern (with your own key). Works offline too.
+- **AI patterns, your choice of model.** Describe what you want in plain English and let **Claude, OpenAI, Gemini, or a lightweight local model** build the whole pattern. The local option runs fully offline via [Ollama](https://ollama.com) — no key, no cloud. Works with a built-in heuristic generator too.
 - **Live activity HUD.** While a run is active, a sleek floating popup shows a pulsing indicator and a live click counter — always on top and click-through, so it never gets in the way.
 - **A living interface.** A hand-built animated UI — a cursor-reactive particle constellation, an aurora backdrop, glassmorphism, and a glowing Start button — rendered entirely in GDI+. It idles to near-zero CPU when the window isn't in the foreground.
 - **Tiny & fast.** ~100 KB, native input via the Win32 `SendInput` API, precise sub-millisecond timing.
@@ -49,7 +49,11 @@ Type a description like:
 
 > *"Click like a human every 1–3 seconds near the center of the screen, with slight random movement, for 5 minutes."*
 
-…pick your provider — **Claude (Anthropic), OpenAI, or Gemini (Google)** — and ClickForge uses your own API key to translate it into a precise, ready-to-run pattern. The model field is editable, so any current model id works. No key? A built-in **offline generator** and one-click **presets** (rapid fire, human idle jiggle, gentle clicks, region spray, double-click spam) have you covered. Keys are stored locally under `%APPDATA%\ClickForge` and sent only to the provider you choose.
+…pick your provider — **Claude (Anthropic), OpenAI, Gemini (Google), or a local model** — and ClickForge translates it into a precise, ready-to-run pattern. The model field is editable, so any current model id works.
+
+- **Local, no key, no cloud:** select **Local (Ollama)** to run a lightweight model right on your machine. Install [Ollama](https://ollama.com), pull a tiny model (e.g. `ollama pull qwen2.5:0.5b`, ~400 MB), and generate patterns fully offline. Leave the key field blank for `http://localhost:11434` or point it at a custom server.
+- **Cloud:** enter your own API key for Claude, OpenAI, or Gemini. Keys are stored locally under `%APPDATA%\ClickForge` and sent only to the provider you choose.
+- **No key or model at all?** A built-in **offline generator** and one-click **presets** (rapid fire, human idle jiggle, gentle clicks, region spray, double-click spam) have you covered.
 
 ## Get started
 
@@ -77,7 +81,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Run
 | Movement | `SetCursorPos` stepped along cubic Bézier paths with smootherstep easing |
 | Timing | `Stopwatch`-based precision sleep blended with coarse sleep |
 | Hotkeys | `RegisterHotKey` + `WM_HOTKEY`, handled in the form's `WndProc` |
-| AI | Anthropic / OpenAI / Google APIs over HTTPS (your key, your provider), with an offline heuristic fallback |
+| AI | Anthropic / OpenAI / Google APIs, or a local model via the Ollama HTTP API (`localhost:11434`), with an offline heuristic fallback |
 | Activity HUD | Topmost per-pixel-alpha layered window (`UpdateLayeredWindow`), click-through |
 | UI | Hand-built dark-themed WinForms — owner-drawn combos, no designer files |
 | Persistence | JSON profiles under `%APPDATA%\ClickForge` |

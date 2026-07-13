@@ -10,7 +10,7 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "ClickForge";
-        private const string AppVersion = "2.3";
+        private const string AppVersion = "2.4";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
@@ -621,10 +621,10 @@ namespace ClickForge
             s.Controls.Add(blurb);
             s.Controls.Add(Ui.Spacer(10));
 
-            _providerCombo = Ui.Combo(220,
-                AiProviders.Display(AiProviders.Anthropic),
-                AiProviders.Display(AiProviders.OpenAI),
-                AiProviders.Display(AiProviders.Google));
+            string[] provDisplays = new string[AiProviders.All.Length];
+            for (int i = 0; i < AiProviders.All.Length; i++)
+                provDisplays[i] = AiProviders.Display(AiProviders.All[i]);
+            _providerCombo = Ui.Combo(240, provDisplays);
             _providerCombo.SelectedIndexChanged += delegate { OnProviderChanged(); };
             s.Controls.Add(Ui.Row("Provider", _providerCombo));
 
@@ -958,8 +958,13 @@ namespace ClickForge
 
         private void UpdateKeyNote(string provider)
         {
-            _keyNote.Text = "Get a key at " + AiProviders.KeyHint(provider)
-                + ". Stored locally in %APPDATA%\\ClickForge. Leave blank to use the offline generator.";
+            if (provider == AiProviders.Local)
+                _keyNote.Text = "Runs on your machine via Ollama (ollama.com) — no key or internet needed. "
+                    + "Leave the field blank for http://localhost:11434, or enter a custom server URL. "
+                    + "Start Ollama and pull the model first, e.g.  ollama pull qwen2.5:0.5b";
+            else
+                _keyNote.Text = "Get a key at " + AiProviders.KeyHint(provider)
+                    + ". Stored locally in %APPDATA%\\ClickForge. Leave blank to use the offline generator.";
         }
 
         private void SelectHotkey(ComboBox cb, int vk)
