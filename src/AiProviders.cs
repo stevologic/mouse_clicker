@@ -7,11 +7,12 @@ namespace ClickForge
         public const string Anthropic = "Anthropic";
         public const string OpenAI = "OpenAI";
         public const string Google = "Google";
+        public const string Grok = "Grok";
         public const string Local = "Local";
 
         public const string DefaultOllamaUrl = "http://localhost:11434";
 
-        public static readonly string[] All = { Local, Anthropic, OpenAI, Google };
+        public static readonly string[] All = { Local, Anthropic, OpenAI, Google, Grok };
 
         public static string Display(string provider)
         {
@@ -21,6 +22,7 @@ namespace ClickForge
                 case Anthropic: return "Claude  (Anthropic)";
                 case OpenAI: return "GPT  (OpenAI)";
                 case Google: return "Gemini  (Google)";
+                case Grok: return "Grok  (xAI)";
             }
             return provider;
         }
@@ -64,6 +66,11 @@ namespace ClickForge
                     {
                         "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-pro"
                     };
+                case Grok:
+                    return new string[]
+                    {
+                        "grok-4", "grok-3", "grok-3-mini", "grok-2-1212"
+                    };
             }
             return new string[] { "" };
         }
@@ -83,6 +90,7 @@ namespace ClickForge
                 case Anthropic: return "console.anthropic.com  ·  sent only to api.anthropic.com";
                 case OpenAI: return "platform.openai.com  ·  sent only to api.openai.com";
                 case Google: return "aistudio.google.com  ·  sent only to generativelanguage.googleapis.com";
+                case Grok: return "console.x.ai  ·  sent only to api.x.ai";
             }
             return "";
         }

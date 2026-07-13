@@ -36,8 +36,8 @@ namespace ClickForge
 
         // Nav items are drawn in the nav glass overlay (no child controls, so
         // the animated glass shows through with no flicker).
-        private static readonly string[] NavNames = { "Click", "Timing", "Movement", "AI", "Profiles", "About" };
-        private static readonly string[] NavIcons = { "⟳", "⏱", "↗", "✦", "☰", "ⓘ" };
+        private static readonly string[] NavNames = { "Click", "Timing", "Movement", "Record", "AI", "Profiles", "About" };
+        private static readonly string[] NavIcons = { "⟳", "⏱", "↗", "●", "✦", "☰", "ⓘ" };
         private Rectangle[] _navRects;
         private int _navActive;
         private int _navHover = -1;
@@ -105,6 +105,16 @@ namespace ClickForge
         private NotifyIcon _tray;
         private ToolStripMenuItem _trayToggleItem;
         private bool _trayHintShown;
+
+        // Record / playback
+        private readonly MacroRecorder _recorder = new MacroRecorder();
+        private readonly MacroPlayer _player = new MacroPlayer();
+        private Button _recordBtn;
+        private Button _playBtn;
+        private Label _recordStatus;
+        private Label _recordCountLbl;
+        private NumericUpDown _recordRepeat;
+        private CheckBox _recordLoop;
         private ComboBox _toggleKeyCombo;
         private ComboBox _stopKeyCombo;
 
@@ -370,6 +380,7 @@ namespace ClickForge
             _pages["Click"] = BuildClickPage();
             _pages["Timing"] = BuildTimingPage();
             _pages["Movement"] = BuildMovePage();
+            _pages["Record"] = BuildRecordPage();
             _pages["AI"] = BuildAiPage();
             _pages["Profiles"] = BuildProfilesPage();
             _pages["About"] = BuildAboutPage();
@@ -645,6 +656,152 @@ namespace ClickForge
             AddPreset(presets, "Random in region", RegionPreset);
             s.Controls.Add(presets);
             return s;
+        }
+
+        private Control BuildRecordPage()
+        {
+            FlowLayoutPanel s = Ui.Stack();
+            s.Controls.Add(Theme.SectionHeader("Record clicks"));
+            s.Controls.Add(Ui.Spacer(4));
+            Label rBlurb = Theme.Label("Press Record, then click anywhere on screen — each click is captured with its "
+                + "position, button, and timing. Clicks on this window are ignored, so you can still use it.", true);
+            rBlurb.MaximumSize = new Size(Ui.ContentWidth, 0);
+            s.Controls.Add(rBlurb);
+            s.Controls.Add(Ui.Spacer(8));
+
+            _recordBtn = new Button();
+            _recordBtn.Text = "●  Record";
+            _recordBtn.Size = new Size(150, 34);
+            Theme.StylePrimaryButton(_recordBtn);
+            _recordBtn.Click += delegate { ToggleRecording(); };
+            _recordStatus = Theme.Label("Idle", true);
+            _recordStatus.AutoSize = true;
+            s.Controls.Add(Ui.RowMulti("", _recordBtn, _recordStatus));
+
+            _recordCountLbl = Theme.Label("No clicks recorded yet.", true);
+            _recordCountLbl.MaximumSize = new Size(Ui.ContentWidth, 0);
+            s.Controls.Add(Ui.Row("", _recordCountLbl));
+
+            s.Controls.Add(Ui.Spacer(12));
+            s.Controls.Add(Theme.SectionHeader("Play back"));
+            s.Controls.Add(Ui.Spacer(6));
+
+            _recordRepeat = Ui.Num(1, 1000000, 100);
+            _recordLoop = Ui.Check("Loop until stopped");
+            _recordLoop.CheckedChanged += delegate { _recordRepeat.Enabled = !_recordLoop.Checked; };
+            s.Controls.Add(Ui.RowMulti("Repeat", _recordRepeat, Ui.Suffix("times"), _recordLoop));
+
+            _playBtn = Ui.SmallButton("▶  Play", 110);
+            _playBtn.Height = 30;
+            _playBtn.Click += delegate { TogglePlayback(); };
+            Button clearRec = Ui.SmallButton("Clear", 80);
+            clearRec.Height = 30;
+            clearRec.Click += delegate { ClearRecording(); };
+            Button toPoints = Ui.SmallButton("Send to Movement points", 190);
+            toPoints.Height = 30;
+            toPoints.Click += delegate { SendRecordingToPoints(); };
+            s.Controls.Add(Ui.RowMulti("", _playBtn, clearRec, toPoints));
+
+            Label rHint = Theme.Label("Press F8 (or Stop) to halt playback at any time.", true);
+            s.Controls.Add(Ui.Row("", rHint));
+
+            _recorder.Changed += delegate { UiInvoke(UpdateRecordUi); };
+            _player.Progress += delegate(int n)
+            {
+                UiInvoke(delegate { _recordStatus.Text = "Playing… " + n + (n == 1 ? " click" : " clicks"); });
+            };
+            _player.Finished += delegate(string reason)
+            {
+                UiInvoke(delegate { _playBtn.Text = "▶  Play"; _recordStatus.ForeColor = Theme.Muted; _recordStatus.Text = reason; });
+            };
+            return s;
+        }
+
+        // ---- Record / playback -------------------------------------------
+
+        private void ToggleRecording()
+        {
+            if (_recorder.IsRecording)
+            {
+                StopRecording();
+                return;
+            }
+            // Recording, the engine, and playback are mutually exclusive.
+            if (_engine.IsRunning) _engine.Stop();
+            _player.Stop();
+            _recorder.Clear();
+            _recorder.Start(this);
+            _recordBtn.Text = "■  Stop recording";
+            _recordStatus.ForeColor = Theme.Accent;
+            _recordStatus.Text = "Recording… click anywhere";
+            UpdateRecordUi();
+        }
+
+        private void StopRecording()
+        {
+            if (!_recorder.IsRecording) return;
+            _recorder.Stop();
+            _recordBtn.Text = "●  Record";
+            _recordStatus.ForeColor = Theme.Muted;
+            _recordStatus.Text = _recorder.Count > 0 ? "Recorded " + _recorder.Count + " clicks" : "Nothing recorded";
+            UpdateRecordUi();
+        }
+
+        private void TogglePlayback()
+        {
+            if (_player.IsPlaying)
+            {
+                _player.Stop();
+                return;
+            }
+            if (_recorder.Count == 0)
+            {
+                MessageBox.Show(this, "Record some clicks first.", AppName,
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (_recorder.IsRecording) StopRecording();
+            if (_engine.IsRunning) _engine.Stop();
+            int repeat = _recordLoop.Checked ? 0 : (int)_recordRepeat.Value;
+            _playBtn.Text = "■  Stop";
+            _recordStatus.ForeColor = Theme.Accent;
+            _recordStatus.Text = "Playing…";
+            _player.Play(_recorder.Steps, repeat);
+        }
+
+        private void ClearRecording()
+        {
+            _player.Stop();
+            _recorder.Clear();
+            _recordStatus.ForeColor = Theme.Muted;
+            _recordStatus.Text = "Cleared";
+        }
+
+        private void SendRecordingToPoints()
+        {
+            if (_recorder.Count == 0)
+            {
+                MessageBox.Show(this, "Record some clicks first.", AppName,
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            _profile.Points.Clear();
+            foreach (RecordedStep st in _recorder.Steps)
+                _profile.Points.Add(new ClickPoint(st.X, st.Y));
+            _profile.PositionMode = PositionMode.PointSequence;
+            LoadToControls();
+            SwitchPage("Movement");
+            _statusLabel.ForeColor = Theme.Good;
+            _statusLabel.Text = "Loaded " + _recorder.Count + " recorded points";
+        }
+
+        private void UpdateRecordUi()
+        {
+            if (_recordCountLbl == null) return;
+            int n = _recorder.Count;
+            _recordCountLbl.Text = n == 0
+                ? "No clicks recorded yet."
+                : n + (n == 1 ? " click recorded." : " clicks recorded.");
         }
 
         private Control BuildAiPage()
@@ -1294,6 +1451,10 @@ namespace ClickForge
 
         private void StartRun()
         {
+            // The configured clicker, recording, and macro playback are mutually
+            // exclusive — starting one cancels the others.
+            _player.Stop();
+            if (_recorder.IsRecording) StopRecording();
             SyncToProfile();
             ProfileStore.SaveConfig(_profile);
             _clickCount = 0;
@@ -1588,7 +1749,14 @@ namespace ClickForge
             UiInvoke(delegate
             {
                 if (id == HotkeyManager.ID_TOGGLE) ToggleRun();
-                else if (id == HotkeyManager.ID_STOP) _engine.Stop();
+                else if (id == HotkeyManager.ID_STOP)
+                {
+                    // Emergency stop halts everything: the clicker, playback,
+                    // and any in-progress recording.
+                    _engine.Stop();
+                    _player.Stop();
+                    if (_recorder.IsRecording) StopRecording();
+                }
             });
         }
 
@@ -1665,6 +1833,8 @@ namespace ClickForge
             if (_anim != null) _anim.Stop();
             if (_hud != null) { try { _hud.End(); _hud.Dispose(); } catch { } }
             _engine.Stop();
+            _player.Stop();
+            if (_recorder.IsRecording) _recorder.Stop();
             try { SyncToProfile(); ProfileStore.SaveConfig(_profile); }
             catch { }
             if (_hotkeys != null) _hotkeys.Unregister();
@@ -1677,7 +1847,7 @@ namespace ClickForge
         {
             Directory.CreateDirectory(dir);
             _active = true;
-            string[] names = { "Click", "Timing", "Movement", "AI", "Profiles", "About" };
+            string[] names = { "Click", "Timing", "Movement", "Record", "AI", "Profiles", "About" };
             foreach (string name in names)
             {
                 SwitchPage(name);
@@ -1701,7 +1871,7 @@ namespace ClickForge
         public void CaptureAllPages(string dir)
         {
             Directory.CreateDirectory(dir);
-            string[] names = { "Click", "Timing", "Movement", "AI", "Profiles", "About" };
+            string[] names = { "Click", "Timing", "Movement", "Record", "AI", "Profiles", "About" };
             foreach (string name in names)
             {
                 SwitchPage(name);

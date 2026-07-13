@@ -22,6 +22,14 @@ namespace ClickForge
                 return;
             }
 
+            // Internal: validate the macro recorder hook + player.
+            //   MouseClicker.exe --rectest <outputFile>
+            if (args != null && args.Length >= 2 && args[0] == "--rectest")
+            {
+                RunRecTest(args[1]);
+                return;
+            }
+
             // Internal: show the live HUD (layered window) on screen and grab it.
             //   MouseClicker.exe --huddemo <outputFile>
             if (args != null && args.Length >= 2 && args[0] == "--huddemo")
@@ -167,6 +175,62 @@ namespace ClickForge
                 sb.AppendLine("sizeof(INPUT) = " + size + "  (" + (IntPtr.Size == 8 ? "x64" : "x86") + ")");
 
                 InputSimulator.MoveTo(start.X, start.Y);
+            }
+            catch (Exception ex)
+            {
+                ok = false;
+                sb.AppendLine("EXCEPTION: " + ex);
+            }
+            sb.AppendLine("RESULT: " + (ok ? "ALL PASS" : "FAILURE"));
+            try { System.IO.File.WriteAllText(outFile, sb.ToString()); }
+            catch { }
+        }
+
+        // Exercises the macro recorder's low-level hook (install/uninstall) and
+        // the player's replay of a recorded click sequence. Restores the cursor.
+        private static void RunRecTest(string outFile)
+        {
+            var sb = new System.Text.StringBuilder();
+            bool ok = true;
+            try
+            {
+                // 1) The low-level mouse hook installs and uninstalls cleanly.
+                var rec = new MacroRecorder();
+                using (Form owner = new Form())
+                {
+                    owner.ShowInTaskbar = false;
+                    rec.Start(owner);
+                    bool hooked = rec.IsRecording;
+                    sb.AppendLine("hook install: " + (hooked ? "PASS" : "FAIL"));
+                    ok = ok && hooked;
+                    rec.Stop();
+                    sb.AppendLine("hook uninstall: " + (!rec.IsRecording ? "PASS" : "FAIL"));
+                    ok = ok && !rec.IsRecording;
+                }
+
+                // 2) The player replays steps, landing the cursor on the last one.
+                var vs = ScreenInfo.Virtual();
+                int cx = vs.Left + vs.Width / 2;
+                int cy = vs.Top + vs.Height / 2;
+                var steps = new System.Collections.Generic.List<RecordedStep>();
+                steps.Add(new RecordedStep { X = cx - 120, Y = cy, Button = MouseButton.Left, DelayMs = 0 });
+                steps.Add(new RecordedStep { X = cx + 120, Y = cy + 60, Button = MouseButton.Left, DelayMs = 40 });
+
+                NativeMethods.POINT startPt = InputSimulator.GetCursor();
+                var player = new MacroPlayer();
+                bool[] done = { false };
+                player.Finished += delegate(string reason) { done[0] = true; };
+                player.Play(steps, 1);
+                for (int i = 0; i < 150 && !done[0]; i++) Thread.Sleep(20);
+
+                NativeMethods.POINT after = InputSimulator.GetCursor();
+                bool landed = Math.Abs(after.X - (cx + 120)) <= 3 && Math.Abs(after.Y - (cy + 60)) <= 3;
+                sb.AppendLine("player finished: " + (done[0] ? "PASS" : "FAIL"));
+                sb.AppendLine("player cursor -> (" + after.X + ", " + after.Y + ") target ("
+                    + (cx + 120) + ", " + (cy + 60) + ")  " + (landed ? "PASS" : "FAIL"));
+                ok = ok && done[0] && landed;
+
+                InputSimulator.MoveTo(startPt.X, startPt.Y);
             }
             catch (Exception ex)
             {

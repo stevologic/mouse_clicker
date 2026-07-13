@@ -120,7 +120,8 @@ namespace ClickForge
                 return req;
             }
 
-            if (provider == AiProviders.OpenAI)
+            // OpenAI and Grok (xAI) share the OpenAI chat-completions shape.
+            if (provider == AiProviders.OpenAI || provider == AiProviders.Grok)
             {
                 var body = new Dictionary<string, object>();
                 body["model"] = model;
@@ -129,7 +130,10 @@ namespace ClickForge
                     Msg("system", system),
                     Msg("user", prompt)
                 };
-                var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
+                string url = provider == AiProviders.Grok
+                    ? "https://api.x.ai/v1/chat/completions"
+                    : "https://api.openai.com/v1/chat/completions";
+                var req = new HttpRequestMessage(HttpMethod.Post, url);
                 req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + key);
                 req.Content = JsonContent(body);
                 return req;
@@ -214,7 +218,7 @@ namespace ClickForge
                 return null;
             }
 
-            if (provider == AiProviders.OpenAI)
+            if (provider == AiProviders.OpenAI || provider == AiProviders.Grok)
             {
                 object[] choices = Get(root, "choices") as object[];
                 if (choices != null && choices.Length > 0)
