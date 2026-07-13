@@ -93,6 +93,10 @@ namespace ClickForge
         public int ToggleHotkeyVk { get; set; }
         public int StopHotkeyVk { get; set; }
 
+        // Window behavior: minimize into the system tray (keep running in the
+        // background) instead of the taskbar.
+        public bool MinimizeToTray { get; set; }
+
         // AI settings. ApiKey/Model hold the *current* provider's values (what
         // AiClient uses); the dictionaries remember each provider's key/model so
         // switching providers doesn't lose them.
@@ -134,6 +138,8 @@ namespace ClickForge
 
             ToggleHotkeyVk = 0x75; // VK_F6
             StopHotkeyVk = 0x77;   // VK_F8
+
+            MinimizeToTray = true;
 
             ApiKey = "";
             Model = "claude-opus-4-8";

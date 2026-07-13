@@ -10,7 +10,7 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "mouseclicker.app";
-        private const string AppVersion = "2.9";
+        private const string AppVersion = "3.0";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
@@ -99,6 +99,12 @@ namespace ClickForge
         // Profiles page
         private ListBox _profilesList;
         private TextBox _profileName;
+        private CheckBox _minTrayCheck;
+
+        // System tray
+        private NotifyIcon _tray;
+        private ToolStripMenuItem _trayToggleItem;
+        private bool _trayHintShown;
         private ComboBox _toggleKeyCombo;
         private ComboBox _stopKeyCombo;
 
@@ -138,6 +144,7 @@ namespace ClickForge
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
             try { Icon = System.Drawing.Icon.FromHandle(Theme.CreateLogo(32).GetHicon()); }
             catch { }
+            SetupTray();
 
             _scene.Resize(ClientSize.Width, ClientSize.Height);
             _hud = new ClickHud();
@@ -161,7 +168,7 @@ namespace ClickForge
             Deactivate += delegate { _active = false; };
 
             Load += delegate { SetupHotkeys(); };
-            Resize += delegate { OnFormResized(); };
+            Resize += delegate { OnFormResized(); HandleMinimizeToTray(); };
             FormClosing += OnClosing;
         }
 
@@ -619,6 +626,22 @@ namespace ClickForge
             s.Controls.Add(Ui.RowMulti("Target jitter radius", _jitter, Ui.Suffix("px")));
             _returnToOrigin = Ui.Check("Return cursor to its start position when the run ends");
             s.Controls.Add(Ui.Row("", _returnToOrigin));
+
+            s.Controls.Add(Ui.Spacer(16));
+            s.Controls.Add(Theme.SectionHeader("Quick presets"));
+            s.Controls.Add(Ui.Spacer(2));
+            Label presetHint = Theme.Label("One click loads a ready-made pattern — tweak it or press Start right away.", true);
+            presetHint.MaximumSize = new Size(Ui.ContentWidth, 0);
+            presetHint.Margin = new Padding(0, 0, 0, 8);
+            s.Controls.Add(presetHint);
+            FlowLayoutPanel presets = new FlowLayoutPanel();
+            presets.AutoSize = true; presets.WrapContents = true; presets.Width = Ui.ContentWidth;
+            AddPreset(presets, "Rapid fire", RapidFirePreset);
+            AddPreset(presets, "Human idle jiggle", HumanIdlePreset);
+            AddPreset(presets, "Gentle 2s clicks", GentlePreset);
+            AddPreset(presets, "Double-click spam", DoublePreset);
+            AddPreset(presets, "Random in region", RegionPreset);
+            s.Controls.Add(presets);
             return s;
         }
 
@@ -711,17 +734,10 @@ namespace ClickForge
             _savePresetBtn.Click += delegate { SaveGeneratedPreset(); };
             s.Controls.Add(Ui.RowMulti("Keep this pattern", _presetNameBox, _savePresetBtn));
 
-            s.Controls.Add(Ui.Spacer(14));
-            s.Controls.Add(Theme.SectionHeader("Or start from a preset"));
-            s.Controls.Add(Ui.Spacer(6));
-            FlowLayoutPanel presets = new FlowLayoutPanel();
-            presets.AutoSize = true; presets.WrapContents = true; presets.Width = Ui.ContentWidth;
-            AddPreset(presets, "Rapid fire", RapidFirePreset);
-            AddPreset(presets, "Human idle jiggle", HumanIdlePreset);
-            AddPreset(presets, "Gentle 2s clicks", GentlePreset);
-            AddPreset(presets, "Double-click spam", DoublePreset);
-            AddPreset(presets, "Random in region", RegionPreset);
-            s.Controls.Add(presets);
+            s.Controls.Add(Ui.Spacer(10));
+            Label presetPointer = Theme.Label("Prefer a ready-made pattern? Grab a quick preset on the Movement tab.", true);
+            presetPointer.MaximumSize = new Size(Ui.ContentWidth, 0);
+            s.Controls.Add(presetPointer);
             return s;
         }
 
@@ -751,6 +767,19 @@ namespace ClickForge
             Button save = Ui.SmallButton("Save as", 90);
             save.Click += delegate { SaveNamedProfile(); };
             s.Controls.Add(Ui.RowMulti("Save current as", _profileName, save));
+
+            s.Controls.Add(Ui.Spacer(14));
+            s.Controls.Add(Theme.SectionHeader("Window"));
+            s.Controls.Add(Ui.Spacer(6));
+            _minTrayCheck = Ui.Check("Minimize to the system tray (keeps clicking in the background)");
+            _minTrayCheck.CheckedChanged += delegate
+            {
+                if (_profile != null) _profile.MinimizeToTray = _minTrayCheck.Checked;
+            };
+            s.Controls.Add(Ui.Row("", _minTrayCheck));
+            Label trayNote = Theme.Label("Find it in the tray by the clock; double-click to reopen, right-click to start/stop or exit.", true);
+            trayNote.MaximumSize = new Size(Ui.ContentWidth, 0);
+            s.Controls.Add(Ui.Row("", trayNote));
 
             s.Controls.Add(Ui.Spacer(14));
             s.Controls.Add(Theme.SectionHeader("Global hotkeys"));
@@ -941,6 +970,7 @@ namespace ClickForge
 
             SelectHotkey(_toggleKeyCombo, _profile.ToggleHotkeyVk);
             SelectHotkey(_stopKeyCombo, _profile.StopHotkeyVk);
+            if (_minTrayCheck != null) _minTrayCheck.Checked = _profile.MinimizeToTray;
 
             RefreshPoints();
             UpdateActionLabels();
@@ -987,6 +1017,7 @@ namespace ClickForge
 
             _profile.ToggleHotkeyVk = SelectedVk(_toggleKeyCombo, 0x75);
             _profile.StopHotkeyVk = SelectedVk(_stopKeyCombo, 0x77);
+            if (_minTrayCheck != null) _profile.MinimizeToTray = _minTrayCheck.Checked;
             _profile.Normalize();
         }
 
@@ -1324,6 +1355,8 @@ namespace ClickForge
             }
             _startButton.Invalidate();
             if (_pulse != null) _pulse.Active = running;
+            // Hovering the tray icon should tell you whether it's clicking.
+            if (_tray != null) _tray.Text = running ? AppName + " — running" : AppName;
         }
 
         private void ResetIdleStatus()
@@ -1564,6 +1597,65 @@ namespace ClickForge
             base.WndProc(ref m);
         }
 
+        // ---- System tray -------------------------------------------------
+
+        private void SetupTray()
+        {
+            _tray = new NotifyIcon();
+            try { _tray.Icon = Icon; } catch { }
+            _tray.Text = AppName;
+            _tray.Visible = true;
+
+            ContextMenuStrip menu = new ContextMenuStrip();
+            ToolStripMenuItem open = new ToolStripMenuItem("Open " + AppName, null,
+                delegate { RestoreFromTray(); });
+            open.Font = new Font(menu.Font, FontStyle.Bold); // default action, matches double-click
+            menu.Items.Add(open);
+            menu.Items.Add(new ToolStripSeparator());
+            _trayToggleItem = new ToolStripMenuItem("Start clicking", null,
+                delegate { ToggleRun(); });
+            menu.Items.Add(_trayToggleItem);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(new ToolStripMenuItem("Exit", null,
+                delegate { Close(); }));
+            // Reflect the live run state each time the menu opens.
+            menu.Opening += delegate
+            {
+                _trayToggleItem.Text = _engine.IsRunning ? "Stop clicking" : "Start clicking";
+            };
+            _tray.ContextMenuStrip = menu;
+            _tray.DoubleClick += delegate { RestoreFromTray(); };
+        }
+
+        private void HandleMinimizeToTray()
+        {
+            if (WindowState == FormWindowState.Minimized
+                && _profile != null && _profile.MinimizeToTray)
+                HideToTray();
+        }
+
+        private void HideToTray()
+        {
+            Hide(); // drops the taskbar button; the tray icon stays put
+            if (!_trayHintShown && _tray != null)
+            {
+                _trayHintShown = true;
+                string msg = _engine.IsRunning
+                    ? "Still clicking — your hotkeys stay active. Double-click to reopen."
+                    : "Still running here. Double-click to reopen, or right-click for options.";
+                try { _tray.ShowBalloonTip(3000, AppName, msg, ToolTipIcon.Info); }
+                catch { }
+            }
+        }
+
+        private void RestoreFromTray()
+        {
+            Show();
+            WindowState = FormWindowState.Normal;
+            Activate();
+            BringToFront();
+        }
+
         // ---- Lifecycle ---------------------------------------------------
 
         private void OnClosing(object sender, FormClosingEventArgs e)
@@ -1574,6 +1666,7 @@ namespace ClickForge
             try { SyncToProfile(); ProfileStore.SaveConfig(_profile); }
             catch { }
             if (_hotkeys != null) _hotkeys.Unregister();
+            if (_tray != null) { try { _tray.Visible = false; _tray.Dispose(); } catch { } }
         }
 
         // Captures the real on-screen pixels of every page (works for the
