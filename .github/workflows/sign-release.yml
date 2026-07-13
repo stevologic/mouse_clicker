@@ -1,0 +1,60 @@
+name: Sign release build (SignPath)
+
+# Builds MouseClicker.exe on a Windows runner and — once SignPath Foundation
+# signing is configured — has SignPath sign it and attaches the signed exe to
+# the GitHub release. It is INERT (build-only) until the SignPath variables and
+# secret below are set, so it is safe to merge now and turn on later.
+#
+# One-time setup after your SignPath Foundation project is approved
+# (Repo Settings -> Secrets and variables -> Actions):
+#   Secret    SIGNPATH_API_TOKEN         SignPath: User settings -> API tokens
+#   Variable  SIGNPATH_ORGANIZATION_ID   SignPath organization GUID
+#   Variable  SIGNPATH_PROJECT_SLUG      usually: mouse_clicker
+#   Variable  SIGNPATH_POLICY_SLUG       e.g. release-signing
+# SignPath's project "CI integration" page generates the exact signing step
+# (with your org id and the current action version) — prefer pasting that in.
+# See SIGNING.md for the full walkthrough.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # upload the signed asset to the release
+
+jobs:
+  build-sign-attach:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build MouseClicker.exe
+        run: powershell -ExecutionPolicy Bypass -File build.ps1
+
+      - name: Upload unsigned build (input for SignPath)
+        id: unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: MouseClicker-unsigned
+          path: MouseClicker.exe
+          if-no-files-found: error
+
+      - name: Sign with SignPath
+        id: sign
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Attach signed exe to the release
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' && github.event_name == 'release' }}
+        run: gh release upload "${{ github.event.release.tag_name }}" "signed/MouseClicker.exe" --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
