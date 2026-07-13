@@ -134,8 +134,10 @@ namespace ClickForge
 
             Text = AppName + " — Robust Auto Clicker";
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(900, 640);
-            MinimumSize = new Size(840, 580);
+            ClientSize = new Size(980, 800);
+            // Real MinimumSize (outer bounds incl. borders) is pinned to the
+            // startup size in Load, so the window can grow but never shrink
+            // below where every tab fits without scrolling.
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
             Font = Theme.UiFont;
@@ -167,7 +169,7 @@ namespace ClickForge
             Activated += delegate { _active = true; };
             Deactivate += delegate { _active = false; };
 
-            Load += delegate { SetupHotkeys(); };
+            Load += delegate { SetupHotkeys(); MinimumSize = Size; };
             Resize += delegate { OnFormResized(); HandleMinimizeToTray(); };
             FormClosing += OnClosing;
         }
@@ -588,7 +590,7 @@ namespace ClickForge
             // Points
             _pointsList = new ListBox();
             _pointsList.Width = 300;
-            _pointsList.Height = 120;
+            _pointsList.Height = 88;
             _pointsList.BackColor = Theme.PanelAlt;
             _pointsList.ForeColor = Theme.Text;
             _pointsList.BorderStyle = BorderStyle.FixedSingle;
@@ -614,28 +616,28 @@ namespace ClickForge
             s.Controls.Add(_regionGroup);
             s.Controls.Add(_pointsGroup);
 
-            s.Controls.Add(Ui.Spacer(14));
+            s.Controls.Add(Ui.Spacer(12));
             s.Controls.Add(Theme.SectionHeader("How the cursor moves"));
             s.Controls.Add(Ui.Spacer(6));
 
             _movementCombo = Ui.Combo(210, "Teleport (instant)", "Linear glide", "Humanized (curved)");
             s.Controls.Add(Ui.Row("Movement", _movementCombo));
-            _movementMs = Ui.Num(0, 60000, 90);
-            s.Controls.Add(Ui.RowMulti("Glide time", _movementMs, Ui.Suffix("ms")));
-            _jitter = Ui.Num(0, 5000, 80);
-            s.Controls.Add(Ui.RowMulti("Target jitter radius", _jitter, Ui.Suffix("px")));
+            _movementMs = Ui.Num(0, 60000, 80);
+            _jitter = Ui.Num(0, 5000, 70);
+            s.Controls.Add(Ui.RowMulti("Glide time / jitter", _movementMs, Ui.Suffix("ms"),
+                Ui.Dash(), _jitter, Ui.Suffix("px")));
             _returnToOrigin = Ui.Check("Return cursor to its start position when the run ends");
             s.Controls.Add(Ui.Row("", _returnToOrigin));
 
-            s.Controls.Add(Ui.Spacer(16));
+            s.Controls.Add(Ui.Spacer(12));
             s.Controls.Add(Theme.SectionHeader("Quick presets"));
             s.Controls.Add(Ui.Spacer(2));
             Label presetHint = Theme.Label("One click loads a ready-made pattern — tweak it or press Start right away.", true);
             presetHint.MaximumSize = new Size(Ui.ContentWidth, 0);
-            presetHint.Margin = new Padding(0, 0, 0, 8);
+            presetHint.Margin = new Padding(0, 0, 0, 6);
             s.Controls.Add(presetHint);
             FlowLayoutPanel presets = new FlowLayoutPanel();
-            presets.AutoSize = true; presets.WrapContents = true; presets.Width = Ui.ContentWidth;
+            presets.AutoSize = true; presets.WrapContents = true; presets.Width = 760;
             AddPreset(presets, "Rapid fire", RapidFirePreset);
             AddPreset(presets, "Human idle jiggle", HumanIdlePreset);
             AddPreset(presets, "Gentle 2s clicks", GentlePreset);
@@ -749,7 +751,7 @@ namespace ClickForge
 
             _profilesList = new ListBox();
             _profilesList.Width = 300;
-            _profilesList.Height = 130;
+            _profilesList.Height = 96;
             _profilesList.BackColor = Theme.PanelAlt;
             _profilesList.ForeColor = Theme.Text;
             _profilesList.BorderStyle = BorderStyle.FixedSingle;
@@ -909,7 +911,7 @@ namespace ClickForge
 
         private void AddPreset(FlowLayoutPanel host, string text, Action apply)
         {
-            Button b = Ui.SmallButton(text, 150);
+            Button b = Ui.SmallButton(text, 140);
             b.Height = 32;
             b.Margin = new Padding(0, 0, 8, 8);
             b.Click += delegate { apply(); };

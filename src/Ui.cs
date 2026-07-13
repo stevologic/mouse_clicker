@@ -7,7 +7,7 @@ namespace ClickForge
     // Small factory helpers for building the settings forms without a designer.
     internal static class Ui
     {
-        public const int RowHeight = 38;
+        public const int RowHeight = 34;
         public const int LabelWidth = 175;
         public const int ContentWidth = 560;
 
@@ -153,7 +153,7 @@ namespace ClickForge
             f.AutoScroll = true;
             f.Dock = DockStyle.Fill;
             f.BackColor = Color.Transparent;
-            f.Padding = new Padding(28, 20, 20, 20);
+            f.Padding = new Padding(28, 14, 20, 14);
             return f;
         }
 
