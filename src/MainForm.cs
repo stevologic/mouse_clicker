@@ -10,7 +10,7 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "mouseclicker.app";
-        private const string AppVersion = "3.1";
+        private const string AppVersion = "3.2";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
@@ -100,6 +100,7 @@ namespace ClickForge
         private ListBox _profilesList;
         private TextBox _profileName;
         private CheckBox _minTrayCheck;
+        private CheckBox _hudCheck;
 
         // System tray
         private NotifyIcon _tray;
@@ -940,6 +941,10 @@ namespace ClickForge
             trayNote.MaximumSize = new Size(Ui.ContentWidth, 0);
             s.Controls.Add(Ui.Row("", trayNote));
 
+            _hudCheck = Ui.Check("Show the live activity HUD (floating pulse + counter)");
+            _hudCheck.CheckedChanged += delegate { OnHudToggle(); };
+            s.Controls.Add(Ui.Row("", _hudCheck));
+
             s.Controls.Add(Ui.Spacer(14));
             s.Controls.Add(Theme.SectionHeader("Global hotkeys"));
             s.Controls.Add(Ui.Spacer(6));
@@ -1130,6 +1135,7 @@ namespace ClickForge
             SelectHotkey(_toggleKeyCombo, _profile.ToggleHotkeyVk);
             SelectHotkey(_stopKeyCombo, _profile.StopHotkeyVk);
             if (_minTrayCheck != null) _minTrayCheck.Checked = _profile.MinimizeToTray;
+            if (_hudCheck != null) _hudCheck.Checked = _profile.ShowHud;
 
             RefreshPoints();
             UpdateActionLabels();
@@ -1177,6 +1183,7 @@ namespace ClickForge
             _profile.ToggleHotkeyVk = SelectedVk(_toggleKeyCombo, 0x75);
             _profile.StopHotkeyVk = SelectedVk(_stopKeyCombo, 0x77);
             if (_minTrayCheck != null) _profile.MinimizeToTray = _minTrayCheck.Checked;
+            if (_hudCheck != null) _profile.ShowHud = _hudCheck.Checked;
             _profile.Normalize();
         }
 
@@ -1462,7 +1469,7 @@ namespace ClickForge
             _statusLabel.ForeColor = Theme.Accent;
             _engine.Start(_profile);
             UpdateStartButton();
-            if (_hud != null) _hud.Begin();
+            if (_profile.ShowHud && _hud != null) _hud.Begin();
         }
 
         private void WireEngine()
@@ -1473,14 +1480,14 @@ namespace ClickForge
                 UiInvoke(delegate
                 {
                     _countLabel.Text = n + (n == 1 ? " click" : " clicks");
-                    if (_hud != null) _hud.SetCount(n);
+                    if (_profile.ShowHud && _hud != null) _hud.SetCount(n);
                     // Throttle the visual pings so very high CPS stays smooth.
                     int now = Environment.TickCount;
                     if (now - _lastRippleTick > 70)
                     {
                         _lastRippleTick = now;
                         if (_pulse != null) _pulse.Ping();
-                        if (_hud != null) _hud.Ping();
+                        if (_profile.ShowHud && _hud != null) _hud.Ping();
                     }
                 });
             };
@@ -1526,6 +1533,20 @@ namespace ClickForge
         {
             _statusLabel.ForeColor = Theme.Muted;
             _statusLabel.Text = "Idle";
+        }
+
+        // Enable/disable the floating HUD, taking effect immediately if a run
+        // is already in progress.
+        private void OnHudToggle()
+        {
+            if (_profile == null || _hudCheck == null) return;
+            _profile.ShowHud = _hudCheck.Checked;
+            if (_hud == null) return;
+            if (_engine.IsRunning)
+            {
+                if (_profile.ShowHud) { _hud.Begin(); _hud.SetCount(_clickCount); }
+                else _hud.End();
+            }
         }
 
         // ---- AI ----------------------------------------------------------

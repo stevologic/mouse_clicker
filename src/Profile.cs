@@ -97,6 +97,10 @@ namespace ClickForge
         // background) instead of the taskbar.
         public bool MinimizeToTray { get; set; }
 
+        // Show the floating live-activity HUD (pulse + click counter) while a
+        // run is active.
+        public bool ShowHud { get; set; }
+
         // AI settings. ApiKey/Model hold the *current* provider's values (what
         // AiClient uses); the dictionaries remember each provider's key/model so
         // switching providers doesn't lose them.
@@ -140,6 +144,7 @@ namespace ClickForge
             StopHotkeyVk = 0x77;   // VK_F8
 
             MinimizeToTray = true;
+            ShowHud = true;
 
             ApiKey = "";
             Model = "claude-opus-4-8";

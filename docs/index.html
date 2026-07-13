@@ -419,6 +419,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Run</code></pre>
       </div>
     </div>
     <p class="sub" style="margin-top:34px; margin-bottom:0">Because it synthesizes mouse input, some third-party antivirus tools may heuristically call it a “PUA / auto-clicker.” It only does what you configure — the source is public to audit, and any detection can be reported to your vendor as a false positive.</p>
+    <p class="sub" style="margin-top:14px; margin-bottom:0; font-size:13.5px">Building your own signed release? <code class="inline">build.ps1</code> Authenticode-signs the exe automatically when you supply a code-signing certificate — no Windows SDK needed. See <a href="https://github.com/stevologic/mouse_clicker#is-it-safe-windows-smartscreen">the signing guide</a>.</p>
   </div>
 </section>
 

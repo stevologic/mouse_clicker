@@ -126,7 +126,37 @@ You have a few options, from most to least cautious:
 
 Because it’s an auto-clicker (it synthesizes mouse input), some **third-party** antivirus tools may heuristically label it a “PUA/auto-clicker.” It only does what you configure — the full source is here to audit, and any detection can be reported to your vendor as a false positive.
 
-> The only way to remove the SmartScreen prompt entirely is to sign the build with a trusted (ideally EV) code-signing certificate. If you’d like to sponsor/provide one, the signing step is easy to add to `build.ps1`.
+### Removing the prompt for good: sign the build
+
+The prompt only disappears completely when the exe is **Authenticode-signed with a certificate Windows trusts**. `build.ps1` already does the signing for you — it just needs a certificate. It uses PowerShell’s built‑in `Set-AuthenticodeSignature`, so **no Windows SDK / signtool is required**:
+
+```powershell
+# Option A — a .pfx file
+$env:CODESIGN_PFX = "C:\path\to\your-cert.pfx"
+$env:CODESIGN_PFX_PASSWORD = "…"          # if the .pfx has a password
+powershell -ExecutionPolicy Bypass -File build.ps1 -Sign
+
+# Option B — a certificate already installed in your Windows cert store
+$env:CODESIGN_THUMBPRINT = "ABCD…1234"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Sign
+```
+
+The build signs with SHA‑256 and RFC‑3161 timestamps the signature (so it stays valid after the certificate expires). `-Sign` makes the build fail if no certificate is configured; without it, a missing certificate just produces an unsigned build.
+
+**Which certificate removes the warning?** You (the publisher) have to obtain one — it requires validating your identity, which is exactly what lets Windows show a real publisher name:
+
+| Option | Removes SmartScreen prompt | Notes |
+| --- | --- | --- |
+| **EV code-signing certificate** | **Immediately**, from the first download | Highest trust; ~$200–500/yr; issued on a hardware token/HSM |
+| **Azure Trusted Signing** | Yes (Microsoft-run signing service) | ~$10/mo; needs an Azure account + identity verification |
+| **OV (standard) code-signing certificate** | After some **download reputation** builds up | Cheaper; the “unknown publisher” text is gone right away, the SmartScreen reputation prompt fades with downloads |
+| **[SignPath Foundation](https://signpath.io/open-source)** | Same as OV (reputation-based) | Free certificate program for eligible open-source projects |
+
+A **self-signed** certificate is *not* enough — Windows doesn’t trust it, so end users would still see the warning (or a worse one). It’s only useful for testing the signing pipeline.
+
+> **This repo is wired for free open-source signing via SignPath.** The release CI ([`.github/workflows/sign-release.yml`](.github/workflows/sign-release.yml)) signs the exe automatically once configured — see **[SIGNING.md](SIGNING.md)** for the step-by-step setup.
+
+Until the release build is signed, the safest paths above (build from source, or verify the SHA-256 and click *More info → Run anyway*) get you running with confidence.
 
 ## Responsible use
 

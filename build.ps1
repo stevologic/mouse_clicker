@@ -5,9 +5,24 @@
 
     Usage:   powershell -ExecutionPolicy Bypass -File build.ps1
              powershell -ExecutionPolicy Bypass -File build.ps1 -Run
+             powershell -ExecutionPolicy Bypass -File build.ps1 -Sign
+
+    Code signing (removes the Windows "unknown publisher" / SmartScreen prompt):
+    the build Authenticode-signs the exe when a certificate is provided via
+    environment variables — no Windows SDK / signtool needed. Set ONE of:
+      $env:CODESIGN_PFX            path to a .pfx code-signing certificate
+      $env:CODESIGN_PFX_PASSWORD   password for that .pfx (if any)
+    -- or --
+      $env:CODESIGN_THUMBPRINT     thumbprint of a cert already in your store
+    Optional:
+      $env:CODESIGN_TIMESTAMP_URL  RFC3161 timestamp URL
+                                   (default http://timestamp.digicert.com)
+    Pass -Sign to fail the build if no certificate is configured. Without a
+    certificate the build still succeeds, unsigned. See README "Is it safe?".
 #>
 param(
-    [switch]$Run
+    [switch]$Run,
+    [switch]$Sign
 )
 
 $ErrorActionPreference = 'Stop'
@@ -109,6 +124,59 @@ if ($LASTEXITCODE -ne 0) {
 
 $sizeKb = [math]::Round((Get-Item $out).Length / 1KB, 1)
 Write-Host "Build succeeded -> MouseClicker.exe ($sizeKb KB)" -ForegroundColor Green
+
+# --- Code signing (optional) ------------------------------------------------
+# Signs the exe so Windows shows the real publisher instead of the scary
+# "unknown publisher" warning. Uses the built-in Set-AuthenticodeSignature
+# cmdlet, so no Windows SDK / signtool is required.
+function Get-CodeSignCert {
+    if ($env:CODESIGN_PFX -and (Test-Path $env:CODESIGN_PFX)) {
+        try {
+            if ($env:CODESIGN_PFX_PASSWORD) {
+                $sec = ConvertTo-SecureString $env:CODESIGN_PFX_PASSWORD -AsPlainText -Force
+                return New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($env:CODESIGN_PFX, $sec)
+            }
+            return Get-PfxCertificate -FilePath $env:CODESIGN_PFX
+        } catch {
+            Write-Warning "Could not load PFX at CODESIGN_PFX: $_"
+            return $null
+        }
+    }
+    if ($env:CODESIGN_THUMBPRINT) {
+        $tp = ($env:CODESIGN_THUMBPRINT -replace '[^0-9A-Fa-f]', '').ToUpper()
+        foreach ($store in 'Cert:\CurrentUser\My', 'Cert:\LocalMachine\My') {
+            try {
+                $c = Get-ChildItem $store -CodeSigningCert -ErrorAction SilentlyContinue |
+                     Where-Object { $_.Thumbprint -eq $tp } | Select-Object -First 1
+                if ($c) { return $c }
+            } catch {}
+        }
+        Write-Warning "No code-signing cert with thumbprint $tp in CurrentUser/LocalMachine 'My' store."
+    }
+    return $null
+}
+
+$cert = Get-CodeSignCert
+if ($cert) {
+    $ts = if ($env:CODESIGN_TIMESTAMP_URL) { $env:CODESIGN_TIMESTAMP_URL } else { 'http://timestamp.digicert.com' }
+    Write-Host "Signing: $($cert.Subject)" -ForegroundColor DarkGray
+    $sig = Set-AuthenticodeSignature -FilePath $out -Certificate $cert `
+        -HashAlgorithm SHA256 -TimestampServer $ts -ErrorAction SilentlyContinue
+    if ($sig -and $sig.SignerCertificate) {
+        Write-Host "Signed OK  [status: $($sig.Status)]" -ForegroundColor Green
+        if ($sig.Status -ne 'Valid') {
+            Write-Host "  Note: status '$($sig.Status)' just means this build machine doesn't fully trust the chain; end users whose Windows trusts the CA root will see a valid signature." -ForegroundColor DarkGray
+        }
+    } else {
+        Write-Error "Signing FAILED: $($sig.Status) $($sig.StatusMessage)"
+        exit 1
+    }
+} elseif ($Sign) {
+    Write-Error "-Sign requested but no signing certificate configured (set CODESIGN_PFX or CODESIGN_THUMBPRINT)."
+    exit 1
+} else {
+    Write-Host "Unsigned build (no signing certificate configured). To remove the Windows 'unknown publisher' prompt, see README 'Is it safe?'." -ForegroundColor DarkGray
+}
 
 if ($Run) {
     Write-Host "Launching..." -ForegroundColor DarkGray
