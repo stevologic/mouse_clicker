@@ -123,3 +123,40 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Sign
 
 A **self-signed** certificate is only good for testing the pipeline — Windows
 doesn't trust it, so end users would still see the warning.
+
+## Ready-to-submit SignPath Foundation application
+
+Copy these into the application form at <https://signpath.io/open-source>.
+
+- **Project name:** mouseclicker.app
+- **Repository:** https://github.com/stevologic/mouse_clicker
+- **Website:** https://mouseclicker.app
+- **License:** MIT (OSI-approved)
+- **Language / build:** C# / .NET Framework WinForms, built in GitHub Actions on
+  `windows-latest` via `build.ps1`; single portable ~130 KB `MouseClicker.exe`.
+
+**Project description:**
+> mouseclicker.app is a free, open-source, no-install Windows auto clicker. It
+> automates mouse clicks and cursor movement with configurable buttons, timing,
+> and on-screen targeting, can record and replay a click sequence, and can turn
+> a plain-English description into a click pattern via the user's own AI key or
+> a local model. It ships as a single self-contained executable that runs on the
+> .NET Framework already in Windows — no installer, no bundled runtime.
+
+**Why signing is needed:**
+> The release is a downloadable `.exe`, so unsigned it triggers the SmartScreen
+> "unknown publisher" prompt, which scares off legitimate users of a free
+> hobby project. Signing lets Windows show the real publisher.
+
+**Proactively addressing the "auto-clicker / PUA" question** (SignPath reviews
+manually and may ask):
+> It is a general-purpose desktop automation tool, not malware or a cheat: the
+> full source is public and auditable, it runs as the invoking user with no
+> elevation, it only performs the input the user explicitly configures, and it
+> does not hide, persist, self-update, exfiltrate data, or target any specific
+> application. Some AV engines heuristically label *any* input-synthesizing tool
+> "PUA"; a scan by Microsoft Defender comes back clean. The README carries a
+> "Responsible use" notice that automation may be disallowed by some games and
+> services.
+
+Once approved, follow the setup steps above.
