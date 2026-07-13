@@ -10,7 +10,7 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "mouseclicker.app";
-        private const string AppVersion = "2.8";
+        private const string AppVersion = "2.9";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
@@ -84,6 +84,8 @@ namespace ClickForge
         private TextBox _aiPrompt;
         private Button _generateButton;
         private Label _aiResult;
+        private TextBox _presetNameBox;
+        private Button _savePresetBtn;
 
         // Local (Ollama) model management
         private readonly OllamaClient _ollama = new OllamaClient();
@@ -699,6 +701,15 @@ namespace ClickForge
             _aiResult.MaximumSize = new Size(Ui.ContentWidth, 0);
             _aiResult.ForeColor = Theme.Good;
             s.Controls.Add(Ui.Row("", _aiResult));
+
+            // Save the just-generated pattern as a named preset (enabled after a
+            // successful generation). Lives right here so you don't have to hop
+            // to the Profiles tab to keep a pattern you like.
+            _presetNameBox = Ui.Text(200, false);
+            _savePresetBtn = Ui.SmallButton("Save as preset", 130);
+            _savePresetBtn.Enabled = false;
+            _savePresetBtn.Click += delegate { SaveGeneratedPreset(); };
+            s.Controls.Add(Ui.RowMulti("Keep this pattern", _presetNameBox, _savePresetBtn));
 
             s.Controls.Add(Ui.Spacer(14));
             s.Controls.Add(Theme.SectionHeader("Or start from a preset"));
@@ -1340,6 +1351,11 @@ namespace ClickForge
                     LoadToControls();
                     _aiResult.ForeColor = res.UsedOffline ? Theme.Muted : Theme.Good;
                     _aiResult.Text = (res.UsedOffline ? "Offline: " : "✓ ") + res.Explanation;
+
+                    // The pattern is now live — let the user save it as a preset.
+                    _savePresetBtn.Enabled = true;
+                    if (string.IsNullOrEmpty(_presetNameBox.Text.Trim()))
+                        _presetNameBox.Text = SuggestPresetName(_aiPrompt.Text);
                 }
                 else
                 {
@@ -1356,6 +1372,39 @@ namespace ClickForge
             {
                 _generateButton.Enabled = true;
             }
+        }
+
+        // Saves the current profile (the just-generated pattern, plus any tweaks
+        // made in the controls afterward) as a named preset in the Profiles tab.
+        private void SaveGeneratedPreset()
+        {
+            string name = _presetNameBox.Text.Trim();
+            if (string.IsNullOrEmpty(name))
+            {
+                MessageBox.Show(this, "Enter a name for the preset first.", AppName,
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            SyncToProfile();
+            ProfileStore.SaveNamed(name, _profile);
+            RefreshProfiles();
+            _aiResult.ForeColor = Theme.Good;
+            _aiResult.Text = "✓ Saved preset \"" + name + "\" — find it under the Profiles tab.";
+            _presetNameBox.Text = "";
+        }
+
+        // Suggests a short preset name from the first few words of the prompt.
+        private static string SuggestPresetName(string prompt)
+        {
+            if (prompt == null) return "AI pattern";
+            string s = prompt.Trim();
+            if (s.Length == 0) return "AI pattern";
+            string[] words = s.Split(new char[] { ' ', '\t', '\r', '\n', ',', '.' },
+                StringSplitOptions.RemoveEmptyEntries);
+            int take = Math.Min(4, words.Length);
+            string name = string.Join(" ", words, 0, take);
+            if (name.Length > 28) name = name.Substring(0, 28).TrimEnd();
+            return name;
         }
 
         // ---- Presets -----------------------------------------------------
