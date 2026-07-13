@@ -112,8 +112,8 @@
   }
   .slider-viewport{overflow:hidden}
   .slider-track{display:flex; transition:transform .55s cubic-bezier(.6,.05,.2,1); will-change:transform}
-  .slide{flex:0 0 100%; position:relative; min-width:0}
-  .slide img{display:block; width:100%; height:auto}
+  .slide{flex:0 0 100%; position:relative; min-width:0; margin:0}
+  .slide img{display:block; width:100%; height:auto; margin:0 auto}
   .slide-cap{
     position:absolute; left:0; right:0; bottom:0; padding:44px 22px 16px;
     color:var(--text); font-size:15px; text-align:left;
@@ -239,15 +239,15 @@
               <figcaption class="slide-cap"><span class="tag2">Click</span><b>Button, action &amp; humanized hold time</b></figcaption>
             </figure>
             <figure class="slide">
-              <img src="img/screenshot-timing.png" alt="ClickForge timing options" loading="lazy" />
+              <img src="img/screenshot-timing.png" alt="ClickForge timing options" />
               <figcaption class="slide-cap"><span class="tag2">Timing</span><b>Intervals, CPS presets &amp; run limits</b></figcaption>
             </figure>
             <figure class="slide">
-              <img src="img/screenshot-movement.png" alt="ClickForge movement options" loading="lazy" />
+              <img src="img/screenshot-movement.png" alt="ClickForge movement options" />
               <figcaption class="slide-cap"><span class="tag2">Movement</span><b>Targets &amp; humanized cursor paths</b></figcaption>
             </figure>
             <figure class="slide">
-              <img src="img/screenshot-ai.png" alt="ClickForge AI pattern generator" loading="lazy" />
+              <img src="img/screenshot-ai.png" alt="ClickForge AI pattern generator" />
               <figcaption class="slide-cap"><span class="tag2">AI</span><b>Generate a whole pattern from a sentence</b></figcaption>
             </figure>
           </div>
@@ -293,7 +293,7 @@
       <div class="card">
         <div class="ic">✦</div>
         <h3>AI patterns, any model</h3>
-        <p>Describe what you want in plain English and let <b>Claude, OpenAI, Gemini, or a lightweight local model</b> build the whole pattern. Run it fully offline with Ollama — no key, no cloud — or fall back to the built-in generator and presets.</p>
+        <p>Describe what you want in plain English and let <b>Claude, OpenAI, Gemini, or a lightweight local model</b> build the whole pattern. Detect and download local models right inside the app and run them fully offline via Ollama — no key, no cloud — or fall back to the built-in generator.</p>
       </div>
       <div class="card">
         <div class="ic">◎</div>
@@ -317,7 +317,7 @@
         <h2>Just describe it</h2>
         <p class="sub">Type what you want in plain English. Pick your provider — Claude, OpenAI, Gemini, or a <b>local model via Ollama</b> — and ClickForge translates it into a precise, ready-to-run pattern.</p>
         <div class="quote"><code>"Click like a human every 1–3 seconds near the center of the screen, with slight random movement, for 5 minutes."</code></div>
-        <p style="color:var(--muted); font-size:14.5px; margin:0">The local option needs no key and no internet — a tiny model like <code>qwen2.5:0.5b</code> runs right on your machine. No key and no Ollama? A built-in offline generator and one-click presets have you covered. Cloud keys are stored locally and sent only to the provider you choose.</p>
+        <p style="color:var(--muted); font-size:14.5px; margin:0">The local option needs no key and no internet — a tiny model like <code>qwen2.5:0.5b</code> runs right on your machine. The app detects your installed models and can download a new one for you, all in-app. No Ollama? A built-in offline generator and one-click presets have you covered. Cloud keys are stored locally and sent only to the provider you choose.</p>
       </div>
       <img src="img/screenshot-ai.png" alt="AI pattern generator" loading="lazy"/>
     </div>

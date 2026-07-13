@@ -10,7 +10,7 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "ClickForge";
-        private const string AppVersion = "2.5";
+        private const string AppVersion = "2.6";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
@@ -84,6 +84,15 @@ namespace ClickForge
         private TextBox _aiPrompt;
         private Button _generateButton;
         private Label _aiResult;
+
+        // Local (Ollama) model management
+        private readonly OllamaClient _ollama = new OllamaClient();
+        private FlowLayoutPanel _localGroup;
+        private Label _localStatus;
+        private Button _downloadBtn;
+        private Button _refreshBtn;
+        private bool _pulling;
+        private int _lastProgressTick;
 
         // Profiles page
         private ListBox _profilesList;
@@ -629,6 +638,8 @@ namespace ClickForge
             s.Controls.Add(Ui.Row("Provider", _providerCombo));
 
             _apiKey = Ui.Text(360, true);
+            // Re-detect local models when the Ollama URL is set/changed.
+            _apiKey.Leave += delegate { if (_uiProvider == AiProviders.Local) DetectLocalModelsAsync(); };
             s.Controls.Add(Ui.Row("API key", _apiKey));
             _keyNote = Theme.Label("", true);
             _keyNote.MaximumSize = new Size(Ui.ContentWidth, 0);
@@ -644,6 +655,25 @@ namespace ClickForge
             _modelCombo.ForeColor = Theme.Text;
             _modelCombo.Font = Theme.UiFont;
             s.Controls.Add(Ui.Row("Model", _modelCombo));
+
+            // Local-model management (shown only for the Local provider).
+            _refreshBtn = Ui.SmallButton("Detect models", 120);
+            _refreshBtn.Click += delegate { DetectLocalModelsAsync(); };
+            _downloadBtn = Ui.SmallButton("Download model", 130);
+            _downloadBtn.Click += delegate { DownloadLocalModelAsync(); };
+            _localStatus = Theme.Label("", true);
+            _localStatus.MaximumSize = new Size(Ui.ContentWidth, 0);
+            _localStatus.Margin = new Padding(0, 4, 0, 0);
+            _localGroup = new FlowLayoutPanel();
+            _localGroup.FlowDirection = FlowDirection.TopDown;
+            _localGroup.WrapContents = false;
+            _localGroup.AutoSize = true;
+            _localGroup.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            _localGroup.Margin = new Padding(0);
+            _localGroup.Controls.Add(Ui.RowMulti("Local models", _refreshBtn, _downloadBtn));
+            _localGroup.Controls.Add(_localStatus);
+            _localGroup.Visible = false;
+            s.Controls.Add(_localGroup);
 
             Label describeLbl = Theme.Label("Describe what you want", false);
             describeLbl.Margin = new Padding(0, 8, 0, 4);
@@ -881,6 +911,10 @@ namespace ClickForge
             UpdateKeyNote(_profile.Provider);
             _loadingUi = false;
 
+            bool localProv = _profile.Provider == AiProviders.Local;
+            if (_localGroup != null) _localGroup.Visible = localProv;
+            if (localProv) DetectLocalModelsAsync();
+
             SelectHotkey(_toggleKeyCombo, _profile.ToggleHotkeyVk);
             SelectHotkey(_stopKeyCombo, _profile.StopHotkeyVk);
 
@@ -947,6 +981,10 @@ namespace ClickForge
             PopulateModelCombo(prov, _profile.GetModel(prov));
             _apiKey.Text = _profile.GetKey(prov);
             UpdateKeyNote(prov);
+
+            bool local = prov == AiProviders.Local;
+            if (_localGroup != null) _localGroup.Visible = local;
+            if (local) DetectLocalModelsAsync();
         }
 
         private void PopulateModelCombo(string provider, string model)
@@ -961,10 +999,118 @@ namespace ClickForge
             if (provider == AiProviders.Local)
                 _keyNote.Text = "Runs on your machine via Ollama (ollama.com) — no key or internet needed. "
                     + "Leave the field blank for http://localhost:11434, or enter a custom server URL. "
-                    + "Start Ollama and pull the model first, e.g.  ollama pull qwen2.5:0.5b";
+                    + "Use \"Detect models\" / \"Download model\" below to manage models right here.";
             else
                 _keyNote.Text = "Get a key at " + AiProviders.KeyHint(provider)
                     + ". Stored locally in %APPDATA%\\ClickForge. Leave blank to use the offline generator.";
+        }
+
+        // ---- Local (Ollama) model management -----------------------------
+
+        private string LocalBaseUrl()
+        {
+            string k = _apiKey.Text.Trim();
+            return string.IsNullOrEmpty(k) ? AiProviders.DefaultOllamaUrl : k.TrimEnd('/');
+        }
+
+        // Query the local Ollama server and fill the model box with the models
+        // that are actually installed.
+        private async void DetectLocalModelsAsync()
+        {
+            if (_pulling) return;
+            string url = LocalBaseUrl();
+            _localStatus.ForeColor = Theme.Muted;
+            _localStatus.Text = "Checking Ollama at " + url + " …";
+
+            List<string> models = null;
+            string error = null;
+            try { models = await _ollama.ListModelsAsync(url); }
+            catch (Exception ex) { error = ex.Message; }
+
+            if (error != null || models == null)
+            {
+                _localStatus.ForeColor = Theme.Danger;
+                _localStatus.Text = "Ollama not reachable at " + url
+                    + ". Install and start it from ollama.com, then click \"Detect models\".";
+                return;
+            }
+
+            string current = _modelCombo.Text;
+            _modelCombo.Items.Clear();
+            if (models.Count > 0)
+            {
+                _modelCombo.Items.AddRange(models.ToArray());
+                _modelCombo.Text = models.Contains(current) ? current : models[0];
+                _localStatus.ForeColor = Theme.Good;
+                _localStatus.Text = "Ollama running · " + models.Count + " model"
+                    + (models.Count == 1 ? "" : "s") + " installed: " + string.Join(", ", models.ToArray());
+            }
+            else
+            {
+                _modelCombo.Items.AddRange(AiProviders.Models(AiProviders.Local));
+                _modelCombo.Text = string.IsNullOrEmpty(current) ? "qwen2.5:0.5b" : current;
+                _localStatus.ForeColor = Theme.Muted;
+                _localStatus.Text = "Ollama is running, but no models are installed. "
+                    + "Pick a small one (e.g. qwen2.5:0.5b) and click \"Download model\".";
+            }
+        }
+
+        // Download the model currently in the box, streaming progress.
+        private async void DownloadLocalModelAsync()
+        {
+            if (_pulling) return;
+            string model = _modelCombo.Text.Trim();
+            if (string.IsNullOrEmpty(model))
+            {
+                _localStatus.ForeColor = Theme.Danger;
+                _localStatus.Text = "Enter a model name to download.";
+                return;
+            }
+            string url = LocalBaseUrl();
+
+            _pulling = true;
+            _downloadBtn.Enabled = false;
+            _refreshBtn.Enabled = false;
+            _downloadBtn.Text = "Downloading…";
+            _localStatus.ForeColor = Theme.Accent;
+            _localStatus.Text = "Starting download of " + model + " … (this can take a few minutes)";
+
+            try
+            {
+                await _ollama.PullAsync(url, model, delegate(string status, double pct)
+                {
+                    UiInvoke(delegate
+                    {
+                        int now = Environment.TickCount;
+                        if (now - _lastProgressTick < 120) return;
+                        _lastProgressTick = now;
+                        _localStatus.Text = pct >= 0
+                            ? ("Downloading " + model + " — " + pct.ToString("0") + "%")
+                            : (Capitalize(status) + " …");
+                    });
+                });
+                _localStatus.ForeColor = Theme.Good;
+                _localStatus.Text = "Downloaded " + model + ". It's ready to use.";
+                DetectLocalModelsAsync();
+            }
+            catch (Exception ex)
+            {
+                _localStatus.ForeColor = Theme.Danger;
+                _localStatus.Text = "Download failed: " + ex.Message;
+            }
+            finally
+            {
+                _pulling = false;
+                _downloadBtn.Enabled = true;
+                _refreshBtn.Enabled = true;
+                _downloadBtn.Text = "Download model";
+            }
+        }
+
+        private static string Capitalize(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "Working";
+            return char.ToUpper(s[0]) + s.Substring(1);
         }
 
         private void SelectHotkey(ComboBox cb, int vk)
