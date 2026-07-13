@@ -10,7 +10,7 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "mouseclicker.app";
-        private const string AppVersion = "3.0";
+        private const string AppVersion = "3.1";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
