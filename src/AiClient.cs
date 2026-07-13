@@ -58,13 +58,17 @@ namespace ClickForge
 
                         string text = ExtractProviderText(provider, respText);
                         if (string.IsNullOrEmpty(text))
+                        {
+                            if (AiProviders.IsLocal(provider))
+                                return Fail("The local model returned an empty response. If it's a large “thinking” model, try a smaller one like qwen2.5:0.5b (use Download model).");
                             return Fail("The model returned an empty response.");
+                        }
 
                         string jsonText = ExtractJsonObject(text);
                         if (jsonText == null)
                             return Fail("Could not find a JSON object in the model's reply.");
 
-                        var pattern = _json.DeserializeObject(jsonText) as IDictionary<string, object>;
+                        var pattern = ParseLoose(jsonText);
                         if (pattern == null)
                             return Fail("The model's JSON could not be parsed.");
 
@@ -98,13 +102,16 @@ namespace ClickForge
                 // is an optional custom server URL.
                 string baseUrl = string.IsNullOrEmpty(key) ? AiProviders.DefaultOllamaUrl : key.Trim().TrimEnd('/');
                 var opts = new Dictionary<string, object>();
-                opts["num_predict"] = 512;
+                opts["num_predict"] = 1024;
                 opts["temperature"] = 0.3;
 
                 var body = new Dictionary<string, object>();
                 body["model"] = model;
                 body["messages"] = new object[] { Msg("system", system), Msg("user", prompt) };
                 body["stream"] = false;
+                // "thinking" models otherwise spend the whole token budget reasoning
+                // and return empty content — disable it so they answer directly.
+                body["think"] = false;
                 body["format"] = "json"; // Ollama constrains output to valid JSON
                 body["options"] = opts;
 
@@ -271,6 +278,32 @@ namespace ClickForge
         {
             object v;
             return (d != null && d.TryGetValue(key, out v)) ? v : null;
+        }
+
+        // Parse the model's JSON, tolerating the small malformations weak local
+        // models sometimes emit even under format:"json".
+        private IDictionary<string, object> ParseLoose(string jsonText)
+        {
+            try
+            {
+                var p = _json.DeserializeObject(jsonText) as IDictionary<string, object>;
+                if (p != null) return p;
+            }
+            catch { }
+            try
+            {
+                return _json.DeserializeObject(RepairJson(jsonText)) as IDictionary<string, object>;
+            }
+            catch { return null; }
+        }
+
+        private static string RepairJson(string s)
+        {
+            // A stray double-quote right after a number, e.g.  "x": 3500"  ->  3500
+            s = Regex.Replace(s, "(?<=[0-9])\"(?=\\s*[,}\\]])", "");
+            // Trailing commas before a closing } or ]
+            s = Regex.Replace(s, ",(\\s*[}\\]])", "$1");
+            return s;
         }
 
         // Pull the first balanced {...} object out of arbitrary text.
