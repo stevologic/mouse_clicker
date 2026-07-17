@@ -129,7 +129,13 @@ namespace ClickForge
                 return fallback;
             try
             {
-                return (TEnum)Enum.Parse(typeof(TEnum), s.Trim(), true);
+                // Enum.Parse also accepts raw numbers ("7"), which can produce a
+                // value outside the enum's defined range — reject those so a bad
+                // model reply can't poison the profile.
+                TEnum parsed = (TEnum)Enum.Parse(typeof(TEnum), s.Trim(), true);
+                if (!Enum.IsDefined(typeof(TEnum), parsed))
+                    return fallback;
+                return parsed;
             }
             catch
             {

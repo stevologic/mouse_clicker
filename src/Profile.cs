@@ -191,6 +191,15 @@ namespace ClickForge
             if (ProviderModels == null) ProviderModels = new Dictionary<string, string>();
             if (string.IsNullOrEmpty(Provider)) Provider = AiProviders.Anthropic;
 
+            // Clamp enums to their defined range: a hand-edited or corrupted
+            // config (or a bad AI reply) must never leave an undefined enum
+            // value behind, or the UI throws setting combo indexes from it.
+            if (!Enum.IsDefined(typeof(MouseButton), Button)) Button = MouseButton.Left;
+            if (!Enum.IsDefined(typeof(ClickAction), Action)) Action = ClickAction.Single;
+            if (!Enum.IsDefined(typeof(RepeatMode), RepeatMode)) RepeatMode = RepeatMode.Infinite;
+            if (!Enum.IsDefined(typeof(PositionMode), PositionMode)) PositionMode = PositionMode.CurrentCursor;
+            if (!Enum.IsDefined(typeof(MovementMode), MovementMode)) MovementMode = MovementMode.Teleport;
+
             // Migrate a legacy single key/model into the Anthropic slot.
             if (!ProviderKeys.ContainsKey(AiProviders.Anthropic) && !string.IsNullOrEmpty(ApiKey))
                 ProviderKeys[AiProviders.Anthropic] = ApiKey;

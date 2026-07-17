@@ -122,7 +122,22 @@ namespace ClickForge
                 return "profile";
             foreach (char c in Path.GetInvalidFileNameChars())
                 name = name.Replace(c, '_');
-            return name.Trim();
+            name = name.Trim();
+            if (name.Length == 0)
+                return "profile";
+
+            // Windows reserves device names (CON, PRN, AUX, NUL, COM1-9,
+            // LPT1-9) regardless of extension — writing "con.json" fails.
+            string upper = name.ToUpperInvariant();
+            string[] reserved =
+            {
+                "CON", "PRN", "AUX", "NUL",
+                "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+                "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+            };
+            foreach (string r in reserved)
+                if (upper == r) return "_" + name;
+            return name;
         }
     }
 }

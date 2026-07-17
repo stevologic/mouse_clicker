@@ -10,7 +10,7 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "mouseclicker.app";
-        private const string AppVersion = "3.2";
+        private const string AppVersion = "3.3";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
@@ -690,7 +690,9 @@ namespace ClickForge
             _recordRepeat = Ui.Num(1, 1000000, 100);
             _recordLoop = Ui.Check("Loop until stopped");
             _recordLoop.CheckedChanged += delegate { _recordRepeat.Enabled = !_recordLoop.Checked; };
-            s.Controls.Add(Ui.RowMulti("Repeat", _recordRepeat, Ui.Suffix("times"), _recordLoop));
+            Label timesSuffix = Ui.Suffix("times");
+            timesSuffix.Width = 44; // the default 34px clips "times" to "time"
+            s.Controls.Add(Ui.RowMulti("Repeat", _recordRepeat, timesSuffix, _recordLoop));
 
             _playBtn = Ui.SmallButton("▶  Play", 110);
             _playBtn.Height = 30;
@@ -786,6 +788,9 @@ namespace ClickForge
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
+            // Capture any pending UI edits first — LoadToControls below reloads
+            // every control from the profile.
+            SyncToProfile();
             _profile.Points.Clear();
             foreach (RecordedStep st in _recorder.Steps)
                 _profile.Points.Add(new ClickPoint(st.X, st.Y));
@@ -1611,7 +1616,8 @@ namespace ClickForge
         }
 
         // Suggests a short preset name from the first few words of the prompt.
-        private static string SuggestPresetName(string prompt)
+        // (internal so --audit can exercise it directly)
+        internal static string SuggestPresetName(string prompt)
         {
             if (prompt == null) return "AI pattern";
             string s = prompt.Trim();
@@ -1715,7 +1721,16 @@ namespace ClickForge
                 return;
             }
             SyncToProfile();
-            ProfileStore.SaveNamed(name, _profile);
+            try
+            {
+                ProfileStore.SaveNamed(name, _profile);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not save \"" + name + "\": " + ex.Message,
+                    AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             RefreshProfiles();
             _profileName.Text = "";
         }
@@ -1744,7 +1759,15 @@ namespace ClickForge
         {
             object sel = _profilesList.SelectedItem;
             if (sel == null) return;
-            ProfileStore.DeleteNamed(sel.ToString());
+            try
+            {
+                ProfileStore.DeleteNamed(sel.ToString());
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not delete: " + ex.Message,
+                    AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
             RefreshProfiles();
         }
 

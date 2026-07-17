@@ -30,6 +30,15 @@ namespace ClickForge
                 return;
             }
 
+            // Internal: unit-style audit of the app's logic (profiles, pattern
+            // mapping, JSON tolerance, engine behavior, motion).
+            //   MouseClicker.exe --audit <outputFile>
+            if (args != null && args.Length >= 2 && args[0] == "--audit")
+            {
+                RunAudit(args[1]);
+                return;
+            }
+
             // Internal: show the live HUD (layered window) on screen and grab it.
             //   MouseClicker.exe --huddemo <outputFile>
             if (args != null && args.Length >= 2 && args[0] == "--huddemo")
@@ -240,6 +249,257 @@ namespace ClickForge
             sb.AppendLine("RESULT: " + (ok ? "ALL PASS" : "FAILURE"));
             try { System.IO.File.WriteAllText(outFile, sb.ToString()); }
             catch { }
+        }
+
+        // Unit-style audit of the app's core logic. Each Check() line asserts
+        // one behavior; any FAIL flips the overall result.
+        private static void RunAudit(string outFile)
+        {
+            var sb = new System.Text.StringBuilder();
+            bool[] allOk = { true };
+            Action<string, bool> check = delegate(string what, bool pass)
+            {
+                sb.AppendLine((pass ? "PASS  " : "FAIL  ") + what);
+                if (!pass) allOk[0] = false;
+            };
+
+            try
+            {
+                // ---- Profile.Normalize -------------------------------------
+                var p = new Profile();
+                p.Button = (MouseButton)99;
+                p.Action = (ClickAction)99;
+                p.RepeatMode = (RepeatMode)99;
+                p.PositionMode = (PositionMode)99;
+                p.MovementMode = (MovementMode)99;
+                p.HoldMinMs = 500; p.HoldMaxMs = 100;       // inverted
+                p.IntervalMinMs = 900; p.IntervalMaxMs = 100; // inverted
+                p.ClicksPerEvent = 0;
+                p.Normalize();
+                check("Normalize clamps undefined Button", p.Button == MouseButton.Left);
+                check("Normalize clamps undefined Action", p.Action == ClickAction.Single);
+                check("Normalize clamps undefined RepeatMode", p.RepeatMode == RepeatMode.Infinite);
+                check("Normalize clamps undefined PositionMode", p.PositionMode == PositionMode.CurrentCursor);
+                check("Normalize clamps undefined MovementMode", p.MovementMode == MovementMode.Teleport);
+                check("Normalize fixes inverted hold range", p.HoldMaxMs >= p.HoldMinMs);
+                check("Normalize fixes inverted interval range", p.IntervalMaxMs >= p.IntervalMinMs);
+                check("Normalize clamps ClicksPerEvent to >= 1", p.ClicksPerEvent >= 1);
+
+                // ---- Profile JSON round-trip -------------------------------
+                var json = new System.Web.Script.Serialization.JavaScriptSerializer();
+                var src = new Profile();
+                src.Button = MouseButton.Middle;
+                src.Action = ClickAction.Double;
+                src.IntervalMinMs = 123; src.IntervalMaxMs = 456;
+                src.MinimizeToTray = false;
+                src.ShowHud = false;
+                src.Points.Add(new ClickPoint(11, 22));
+                src.SetKey("Grok", "k-test");
+                src.SetModel("Grok", "grok-4");
+                Profile rt = json.Deserialize<Profile>(json.Serialize(src));
+                rt.Normalize();
+                check("Round-trip keeps Button", rt.Button == MouseButton.Middle);
+                check("Round-trip keeps Action", rt.Action == ClickAction.Double);
+                check("Round-trip keeps intervals", rt.IntervalMinMs == 123 && rt.IntervalMaxMs == 456);
+                check("Round-trip keeps MinimizeToTray=false", rt.MinimizeToTray == false);
+                check("Round-trip keeps ShowHud=false", rt.ShowHud == false);
+                check("Round-trip keeps points", rt.Points.Count == 1 && rt.Points[0].X == 11 && rt.Points[0].Y == 22);
+                check("Round-trip keeps provider key/model", rt.GetKey("Grok") == "k-test" && rt.GetModel("Grok") == "grok-4");
+
+                // Legacy config (no new keys) keeps constructor defaults.
+                Profile legacy = json.Deserialize<Profile>("{\"IntervalMinMs\":50}");
+                check("Legacy config defaults MinimizeToTray=true", legacy.MinimizeToTray);
+                check("Legacy config defaults ShowHud=true", legacy.ShowHud);
+
+                // ---- ProfileStore round trip -------------------------------
+                string odd = "au:di*t?te st";
+                ProfileStore.SaveNamed(odd, src);
+                Profile loaded = ProfileStore.LoadNamed(odd);
+                check("Store round-trips odd names", loaded != null && loaded.IntervalMinMs == 123);
+                ProfileStore.DeleteNamed(odd);
+                bool gone = Array.IndexOf(ProfileStore.ListNames(), odd) < 0;
+                check("Store deletes named profile", gone);
+
+                // Reserved device names must not throw.
+                bool conOk = true;
+                try
+                {
+                    ProfileStore.SaveNamed("con", src);
+                    Profile conP = ProfileStore.LoadNamed("con");
+                    conOk = conP != null && conP.IntervalMinMs == 123;
+                    ProfileStore.DeleteNamed("con");
+                }
+                catch { conOk = false; }
+                check("Store survives reserved name 'con'", conOk);
+
+                // ---- PatternMapper -----------------------------------------
+                var pat = new System.Collections.Generic.Dictionary<string, object>();
+                pat["button"] = "Right";
+                pat["clickType"] = "Double";
+                pat["intervalMinMs"] = 100; pat["intervalMaxMs"] = 200;
+                pat["positionMode"] = "FixedPoint";
+                pat["fixedX"] = 10; pat["fixedY"] = 20;
+                pat["movementMode"] = "Humanized";
+                pat["sequenceLoop"] = "no";
+                pat["returnToOrigin"] = "yes";
+                pat["points"] = new object[]
+                {
+                    MakeMap("x", 1, "y", 2),
+                    MakeMap("x", 3, "y", 4)
+                };
+                var tp = new Profile();
+                PatternMapper.ApplyToProfile(tp, pat);
+                check("Mapper sets button/action", tp.Button == MouseButton.Right && tp.Action == ClickAction.Double);
+                check("Mapper sets intervals", tp.IntervalMinMs == 100 && tp.IntervalMaxMs == 200);
+                check("Mapper sets position + fixed point", tp.PositionMode == PositionMode.FixedPoint && tp.FixedX == 10 && tp.FixedY == 20);
+                check("Mapper sets movement mode", tp.MovementMode == MovementMode.Humanized);
+                check("Mapper parses bool words", tp.SequenceLoop == false && tp.ReturnToOrigin == true);
+                check("Mapper parses points array", tp.Points.Count == 2 && tp.Points[1].X == 3 && tp.Points[1].Y == 4);
+
+                var bad = new System.Collections.Generic.Dictionary<string, object>();
+                bad["button"] = "7";        // numeric string -> undefined enum
+                bad["clickType"] = "bogus"; // unknown name
+                var bp = new Profile();
+                MouseButton beforeB = bp.Button; ClickAction beforeA = bp.Action;
+                PatternMapper.ApplyToProfile(bp, bad);
+                check("Mapper rejects out-of-range numeric enum", bp.Button == beforeB);
+                check("Mapper rejects unknown enum name", bp.Action == beforeA);
+                check("Mapper GetInt parses double/string",
+                    PatternMapper.GetInt(MakeMap("v", 12.6, "w", "34"), "v", 0) == 13
+                    && PatternMapper.GetInt(MakeMap("v", 12.6, "w", "34"), "w", 0) == 34);
+
+                // ---- AiClient JSON tolerance --------------------------------
+                string wrapped = "Sure! Here you go:\n```json\n{\"a\":{\"b\":\"x}y\"},\"c\":2}\n``` hope that helps";
+                string extracted = AiClient.ExtractJsonObject(wrapped);
+                check("ExtractJsonObject handles nesting + braces in strings",
+                    extracted == "{\"a\":{\"b\":\"x}y\"},\"c\":2}");
+
+                string malformed = "{\"button\":\"Right\",\"intervalMaxMs\":3500\",\"durationSeconds\":60\",}";
+                var ai = new AiClient();
+                var repaired = ai.ParseLoose(malformed);
+                check("ParseLoose repairs stray quotes + trailing comma",
+                    repaired != null
+                    && PatternMapper.GetInt(repaired, "intervalMaxMs", -1) == 3500
+                    && PatternMapper.GetInt(repaired, "durationSeconds", -1) == 60);
+                check("ParseLoose returns null for garbage", ai.ParseLoose("not json at all") == null);
+
+                // ---- SuggestPresetName -------------------------------------
+                string sugg = MainForm.SuggestPresetName("Click like a human every 1-3 seconds near the center");
+                check("SuggestPresetName takes first words <= 28 chars",
+                    sugg == "Click like a human" && sugg.Length <= 28);
+                check("SuggestPresetName falls back on empty", MainForm.SuggestPresetName("  ") == "AI pattern");
+
+                // ---- HumanMotion (moves the real cursor; restored below) ----
+                NativeMethods.POINT before = InputSimulator.GetCursor();
+                var vs = ScreenInfo.Virtual();
+                int hx = vs.Left + vs.Width / 2, hy = vs.Top + vs.Height / 2;
+                HumanMotion.MoveTo(hx, hy, MovementMode.Teleport, 0, new Random(1), null);
+                NativeMethods.POINT afterTp = InputSimulator.GetCursor();
+                check("Motion teleport lands on target", Math.Abs(afterTp.X - hx) <= 2 && Math.Abs(afterTp.Y - hy) <= 2);
+                HumanMotion.MoveTo(hx + 200, hy + 100, MovementMode.Humanized, 80, new Random(2), null);
+                NativeMethods.POINT afterHm = InputSimulator.GetCursor();
+                check("Motion humanized glide lands on target",
+                    Math.Abs(afterHm.X - (hx + 200)) <= 2 && Math.Abs(afterHm.Y - (hy + 100)) <= 2);
+
+                // ---- ClickEngine behavior (scroll events at a corner) -------
+                // Park the cursor at the bottom-right corner so the wheel
+                // events land on the desktop edge and affect nothing.
+                InputSimulator.MoveTo(vs.Left + vs.Width - 2, vs.Top + vs.Height - 2);
+
+                // 1) Count mode finishes at exactly N with one Stopped event.
+                var engine = new ClickEngine();
+                var clicks = new System.Collections.Generic.List<long>();
+                var stops = new System.Collections.Generic.List<string>();
+                object gate = new object();
+                engine.ClickPerformed += delegate(long n) { lock (gate) clicks.Add(n); };
+                engine.Stopped += delegate(string r) { lock (gate) stops.Add(r); };
+
+                var cp = new Profile();
+                cp.Action = ClickAction.ScrollUp;
+                cp.ClicksPerEvent = 1;
+                cp.PositionMode = PositionMode.CurrentCursor;
+                cp.JitterRadius = 0;
+                cp.RepeatMode = RepeatMode.Count;
+                cp.RepeatCount = 3;
+                cp.IntervalMinMs = 10; cp.IntervalMaxMs = 10;
+                cp.HoldMinMs = 0; cp.HoldMaxMs = 0;
+                cp.StartDelayMs = 0;
+                engine.Start(cp);
+                for (int i = 0; i < 100 && engine.IsRunning; i++) Thread.Sleep(20);
+                Thread.Sleep(100);
+                int nClicks, nStops; string lastStop;
+                lock (gate) { nClicks = clicks.Count; nStops = stops.Count; lastStop = nStops > 0 ? stops[nStops - 1] : ""; }
+                check("Engine count mode performs exactly N events", nClicks == 3);
+                check("Engine count mode raises exactly one Stopped", nStops == 1);
+                check("Engine count mode reason is 'finished'", lastStop.StartsWith("Finished"));
+                check("Engine not running after finish", !engine.IsRunning);
+
+                // 2) Cancelling during the countdown raises ONE Stopped with
+                //    the cancellation reason (regression: double-Finish bug).
+                lock (gate) { clicks.Clear(); stops.Clear(); }
+                var dp = new Profile();
+                dp.Action = ClickAction.ScrollUp;
+                dp.StartDelayMs = 1500;
+                dp.RepeatMode = RepeatMode.Count;
+                dp.RepeatCount = 1;
+                engine.Start(dp);
+                Thread.Sleep(150);
+                engine.Stop();
+                Thread.Sleep(300);
+                lock (gate) { nClicks = clicks.Count; nStops = stops.Count; lastStop = nStops > 0 ? stops[nStops - 1] : ""; }
+                check("Engine countdown cancel performs no events", nClicks == 0);
+                check("Engine countdown cancel raises exactly one Stopped", nStops == 1);
+                check("Engine countdown cancel reason is 'Cancelled before start.'", lastStop == "Cancelled before start.");
+
+                // 3) Rapid Stop->Start: the superseded session must stay silent
+                //    and only the new session clicks (regression: restart race).
+                lock (gate) { clicks.Clear(); stops.Clear(); }
+                var ip = new Profile();
+                ip.Action = ClickAction.ScrollUp;
+                ip.PositionMode = PositionMode.CurrentCursor;
+                ip.JitterRadius = 0;
+                ip.RepeatMode = RepeatMode.Infinite;
+                ip.IntervalMinMs = 30; ip.IntervalMaxMs = 30;
+                ip.HoldMinMs = 0; ip.HoldMaxMs = 0;
+                ip.StartDelayMs = 0;
+                engine.Start(ip);
+                Thread.Sleep(120);
+                engine.Stop();
+                engine.Start(ip);      // immediately supersede the old session
+                Thread.Sleep(250);
+                bool runningAfterRestart = engine.IsRunning;
+                engine.Stop();
+                Thread.Sleep(300);
+                lock (gate) { nStops = stops.Count; lastStop = nStops > 0 ? stops[nStops - 1] : ""; }
+                int settled; lock (gate) { settled = clicks.Count; }
+                Thread.Sleep(250);
+                int after; lock (gate) { after = clicks.Count; }
+                check("Engine restart: new session runs", runningAfterRestart);
+                check("Engine restart: superseded session stays silent (1 Stopped)", nStops == 1);
+                check("Engine restart: final reason is 'Stopped.'", lastStop == "Stopped.");
+                check("Engine restart: no events after final stop", after == settled);
+                check("Engine not running at end", !engine.IsRunning);
+
+                // Restore the cursor where we found it.
+                InputSimulator.MoveTo(before.X, before.Y);
+            }
+            catch (Exception ex)
+            {
+                allOk[0] = false;
+                sb.AppendLine("EXCEPTION: " + ex);
+            }
+
+            sb.AppendLine("RESULT: " + (allOk[0] ? "ALL PASS" : "FAILURE"));
+            try { System.IO.File.WriteAllText(outFile, sb.ToString()); }
+            catch { }
+        }
+
+        private static System.Collections.Generic.Dictionary<string, object> MakeMap(
+            string k1, object v1, string k2, object v2)
+        {
+            var d = new System.Collections.Generic.Dictionary<string, object>();
+            d[k1] = v1; d[k2] = v2;
+            return d;
         }
     }
 }

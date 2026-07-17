@@ -6,12 +6,21 @@ namespace ClickForge
     // Runs a clicking session on a dedicated background thread. The UI thread
     // only ever calls Start/Stop and subscribes to the events; all synthetic
     // input happens off the UI thread so the window stays responsive.
+    //
+    // Each run gets its own Session token (cancellation flag), Profile clone,
+    // and Random. A rapid Stop -> Start can briefly overlap with the previous
+    // thread winding down, but the old thread only ever consults its OWN
+    // session flag (so it can't be revived by the new run starting), and a
+    // superseded session never raises Stopped (so it can't clobber the UI
+    // state of the run that replaced it).
     internal class ClickEngine
     {
-        private Thread _thread;
-        private volatile bool _running;
-        private Profile _profile;
-        private readonly Random _rng = new Random();
+        private class Session
+        {
+            public volatile bool Running = true;
+        }
+
+        private Session _session;
 
         // Fired (on the engine thread) after every completed click event.
         public event Action<long> ClickPerformed;
@@ -20,82 +29,99 @@ namespace ClickForge
         // Fired for countdown / status updates.
         public event Action<string> Status;
 
-        public bool IsRunning { get { return _running; } }
+        public bool IsRunning
+        {
+            get
+            {
+                Session s = _session;
+                return s != null && s.Running;
+            }
+        }
 
         public void Start(Profile profile)
         {
-            if (_running)
+            if (IsRunning)
                 return;
 
-            _profile = Clone(profile);
-            _profile.Normalize();
-            _running = true;
+            Profile p = Clone(profile);
+            p.Normalize();
 
-            _thread = new Thread(RunLoop);
-            _thread.IsBackground = true;
-            _thread.Name = "ClickForge.Engine";
-            _thread.Start();
+            Session s = new Session();
+            _session = s;
+
+            Thread t = new Thread(delegate() { RunLoop(s, p); });
+            t.IsBackground = true;
+            t.Name = "ClickForge.Engine";
+            t.Start();
         }
 
         public void Stop()
         {
-            _running = false;
+            Session s = _session;
+            if (s != null)
+                s.Running = false;
         }
 
-        private void RunLoop()
+        private void RunLoop(Session s, Profile p)
         {
+            // Per-run RNG: Random is not thread-safe, and a stale thread from a
+            // previous session may still be finishing while this one starts.
+            Random rng = new Random(unchecked(Environment.TickCount * 31
+                + Thread.CurrentThread.ManagedThreadId));
+
             long count = 0;
             string reason = "Stopped.";
             NativeMethods.POINT origin = InputSimulator.GetCursor();
 
             try
             {
-                if (!Countdown(_profile.StartDelayMs))
+                if (!Countdown(s, p.StartDelayMs))
                 {
-                    Finish(count, "Cancelled before start.");
-                    return;
+                    reason = "Cancelled before start.";
+                    return; // the finally block reports the finish
                 }
 
                 Raise(Status, "Running...");
 
-                DateTime endAt = DateTime.UtcNow.AddSeconds(_profile.DurationSeconds);
+                DateTime endAt = DateTime.UtcNow.AddSeconds(p.DurationSeconds);
                 int seqIndex = 0;
 
-                while (_running)
+                while (s.Running)
                 {
-                    if (_profile.RepeatMode == RepeatMode.Count && count >= _profile.RepeatCount)
+                    if (p.RepeatMode == RepeatMode.Count && count >= p.RepeatCount)
                     {
-                        reason = "Finished: reached " + _profile.RepeatCount + " clicks.";
+                        reason = "Finished: reached " + p.RepeatCount + " clicks.";
                         break;
                     }
-                    if (_profile.RepeatMode == RepeatMode.Duration && DateTime.UtcNow >= endAt)
+                    if (p.RepeatMode == RepeatMode.Duration && DateTime.UtcNow >= endAt)
                     {
                         reason = "Finished: duration elapsed.";
                         break;
                     }
 
                     int tx, ty;
-                    bool haveTarget = ComputeTarget(seqIndex, out tx, out ty);
+                    bool haveTarget = ComputeTarget(p, rng, seqIndex, out tx, out ty);
 
                     if (haveTarget)
                     {
-                        ApplyJitter(ref tx, ref ty);
-                        HumanMotion.MoveTo(tx, ty, _profile.MovementMode,
-                            _profile.MovementDurationMs, _rng, IsStopped);
-                        if (!_running) break;
+                        ApplyJitter(p, rng, ref tx, ref ty);
+                        HumanMotion.MoveTo(tx, ty, p.MovementMode,
+                            p.MovementDurationMs, rng,
+                            delegate { return !s.Running; });
+                        if (!s.Running) break;
                     }
 
-                    PerformAction();
+                    PerformAction(s, p, rng);
                     count++;
                     Raise(ClickPerformed, count);
 
-                    if (_profile.PositionMode == PositionMode.PointSequence &&
-                        _profile.Points.Count > 0)
+                    if (p.PositionMode == PositionMode.PointSequence &&
+                        p.Points.Count > 0)
                     {
                         seqIndex++;
-                        if (seqIndex >= _profile.Points.Count)
+                        if (seqIndex >= p.Points.Count)
                         {
-                            if (_profile.SequenceLoop)
+                            if (p.SequenceLoop)
                             {
                                 seqIndex = 0;
                             }
@@ -107,13 +133,10 @@ namespace ClickForge
                         }
                     }
 
-                    int interval = RandomBetween(_profile.IntervalMinMs, _profile.IntervalMaxMs);
-                    if (!InterruptibleSleep(interval))
+                    int interval = RandomBetween(rng, p.IntervalMinMs, p.IntervalMaxMs);
+                    if (!InterruptibleSleep(s, interval))
                         break;
                 }
-
-                if (_running == false && reason == "Stopped.")
-                    reason = "Stopped.";
             }
             catch (Exception ex)
             {
@@ -121,30 +144,28 @@ namespace ClickForge
             }
             finally
             {
-                if (_profile.ReturnToOrigin)
+                if (p.ReturnToOrigin)
                 {
                     try { InputSimulator.MoveTo(origin.X, origin.Y); }
                     catch { }
                 }
-                Finish(count, reason);
+                s.Running = false;
+                // Only the current session gets to report; a superseded run
+                // stays silent so it can't overwrite the new run's UI state.
+                if (_session == s)
+                    Raise(Stopped, reason);
             }
-        }
-
-        private void Finish(long count, string reason)
-        {
-            _running = false;
-            Raise(Stopped, reason);
         }
 
         // ---- Target computation ------------------------------------------
 
-        private bool ComputeTarget(int seqIndex, out int x, out int y)
+        private static bool ComputeTarget(Profile p, Random rng, int seqIndex, out int x, out int y)
         {
-            switch (_profile.PositionMode)
+            switch (p.PositionMode)
             {
                 case PositionMode.CurrentCursor:
                     // Only move if jitter is requested; otherwise click in place.
-                    if (_profile.JitterRadius <= 0)
+                    if (p.JitterRadius <= 0)
                     {
                         x = 0; y = 0;
                         return false;
@@ -154,44 +175,44 @@ namespace ClickForge
                     return true;
 
                 case PositionMode.FixedPoint:
-                    x = _profile.FixedX; y = _profile.FixedY;
+                    x = p.FixedX; y = p.FixedY;
                     return true;
 
                 case PositionMode.RandomInRegion:
-                    int left = Math.Min(_profile.RegionLeft, _profile.RegionRight);
-                    int right = Math.Max(_profile.RegionLeft, _profile.RegionRight);
-                    int top = Math.Min(_profile.RegionTop, _profile.RegionBottom);
-                    int bottom = Math.Max(_profile.RegionTop, _profile.RegionBottom);
+                    int left = Math.Min(p.RegionLeft, p.RegionRight);
+                    int right = Math.Max(p.RegionLeft, p.RegionRight);
+                    int top = Math.Min(p.RegionTop, p.RegionBottom);
+                    int bottom = Math.Max(p.RegionTop, p.RegionBottom);
                     if (right <= left) right = left + 1;
                     if (bottom <= top) bottom = top + 1;
-                    x = _rng.Next(left, right + 1);
-                    y = _rng.Next(top, bottom + 1);
+                    x = rng.Next(left, right + 1);
+                    y = rng.Next(top, bottom + 1);
                     return true;
 
                 case PositionMode.PointSequence:
-                    if (_profile.Points.Count == 0)
+                    if (p.Points.Count == 0)
                     {
                         x = 0; y = 0;
                         return false;
                     }
-                    int idx = seqIndex % _profile.Points.Count;
-                    ClickPoint p = _profile.Points[idx];
-                    x = p.X; y = p.Y;
+                    int idx = seqIndex % p.Points.Count;
+                    ClickPoint pt = p.Points[idx];
+                    x = pt.X; y = pt.Y;
                     return true;
             }
             x = 0; y = 0;
             return false;
         }
 
-        private void ApplyJitter(ref int x, ref int y)
+        private static void ApplyJitter(Profile p, Random rng, ref int x, ref int y)
         {
-            int r = _profile.JitterRadius;
+            int r = p.JitterRadius;
             if (r <= 0) return;
             // Uniform-ish disc: retry until inside radius (cheap for small r).
             for (int i = 0; i < 8; i++)
             {
-                int ox = _rng.Next(-r, r + 1);
-                int oy = _rng.Next(-r, r + 1);
+                int ox = rng.Next(-r, r + 1);
+                int oy = rng.Next(-r, r + 1);
                 if (ox * ox + oy * oy <= r * r)
                 {
                     x += ox; y += oy;
@@ -202,100 +223,95 @@ namespace ClickForge
 
         // ---- Action ------------------------------------------------------
 
-        private void PerformAction()
+        private static void PerformAction(Session s, Profile p, Random rng)
         {
-            int hold = RandomBetween(_profile.HoldMinMs, _profile.HoldMaxMs);
-            switch (_profile.Action)
+            int hold = RandomBetween(rng, p.HoldMinMs, p.HoldMaxMs);
+            switch (p.Action)
             {
                 case ClickAction.Single:
-                    InputSimulator.Click(_profile.Button, hold);
+                    InputSimulator.Click(p.Button, hold);
                     break;
                 case ClickAction.Double:
-                    InputSimulator.Click(_profile.Button, hold);
-                    PrecisionSleep.Sleep(GapForDouble());
-                    InputSimulator.Click(_profile.Button, hold);
+                    InputSimulator.Click(p.Button, hold);
+                    PrecisionSleep.Sleep(GapForDouble(rng));
+                    InputSimulator.Click(p.Button, hold);
                     break;
                 case ClickAction.Triple:
-                    InputSimulator.Click(_profile.Button, hold);
-                    PrecisionSleep.Sleep(GapForDouble());
-                    InputSimulator.Click(_profile.Button, hold);
-                    PrecisionSleep.Sleep(GapForDouble());
-                    InputSimulator.Click(_profile.Button, hold);
+                    InputSimulator.Click(p.Button, hold);
+                    PrecisionSleep.Sleep(GapForDouble(rng));
+                    InputSimulator.Click(p.Button, hold);
+                    PrecisionSleep.Sleep(GapForDouble(rng));
+                    InputSimulator.Click(p.Button, hold);
                     break;
                 case ClickAction.MultiClick:
-                    int n = _profile.ClicksPerEvent;
+                    int n = p.ClicksPerEvent;
                     for (int i = 0; i < n; i++)
                     {
-                        if (!_running) return;
-                        InputSimulator.Click(_profile.Button, hold);
-                        if (i < n - 1) PrecisionSleep.Sleep(GapForDouble());
+                        if (!s.Running) return;
+                        InputSimulator.Click(p.Button, hold);
+                        if (i < n - 1) PrecisionSleep.Sleep(GapForDouble(rng));
                     }
                     break;
                 case ClickAction.ScrollUp:
-                    InputSimulator.ScrollWheel(Math.Max(1, _profile.ClicksPerEvent));
+                    InputSimulator.ScrollWheel(Math.Max(1, p.ClicksPerEvent));
                     break;
                 case ClickAction.ScrollDown:
-                    InputSimulator.ScrollWheel(-Math.Max(1, _profile.ClicksPerEvent));
+                    InputSimulator.ScrollWheel(-Math.Max(1, p.ClicksPerEvent));
                     break;
                 case ClickAction.MouseDown:
-                    InputSimulator.MouseDown(_profile.Button);
+                    InputSimulator.MouseDown(p.Button);
                     break;
                 case ClickAction.MouseUp:
-                    InputSimulator.MouseUp(_profile.Button);
+                    InputSimulator.MouseUp(p.Button);
                     break;
             }
         }
 
         // A small human-like gap between the presses of a multi-click.
-        private int GapForDouble()
+        private static int GapForDouble(Random rng)
         {
-            return RandomBetween(30, 60);
+            return RandomBetween(rng, 30, 60);
         }
 
         // ---- Helpers -----------------------------------------------------
 
-        private bool IsStopped()
-        {
-            return !_running;
-        }
-
-        private int RandomBetween(int min, int max)
+        private static int RandomBetween(Random rng, int min, int max)
         {
             if (max <= min) return min;
-            return _rng.Next(min, max + 1);
+            return rng.Next(min, max + 1);
         }
 
         // Sleep that wakes early if Stop is pressed. Returns false if stopped.
-        private bool InterruptibleSleep(int ms)
+        private static bool InterruptibleSleep(Session s, int ms)
         {
             if (ms <= 0)
-                return _running;
+                return s.Running;
 
             int remaining = ms;
             while (remaining > 0)
             {
-                if (!_running) return false;
+                if (!s.Running) return false;
                 int chunk = remaining > 20 ? 20 : remaining;
                 PrecisionSleep.Sleep(chunk);
                 remaining -= chunk;
             }
-            return _running;
+            return s.Running;
         }
 
         // Pre-start countdown with 1-second status ticks.
-        private bool Countdown(int ms)
+        private bool Countdown(Session s, int ms)
         {
             int remaining = ms;
             while (remaining > 0)
             {
-                if (!_running) return false;
+                if (!s.Running) return false;
                 int secs = (int)Math.Ceiling(remaining / 1000.0);
                 Raise(Status, "Starting in " + secs + "...");
                 int chunk = remaining > 100 ? 100 : remaining;
                 PrecisionSleep.Sleep(chunk);
                 remaining -= chunk;
             }
-            return _running;
+            return s.Running;
         }
 
         private static void Raise(Action<string> ev, string arg)

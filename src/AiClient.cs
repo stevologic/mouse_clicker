@@ -286,7 +286,8 @@ namespace ClickForge
 
         // Parse the model's JSON, tolerating the small malformations weak local
         // models sometimes emit even under format:"json".
-        private IDictionary<string, object> ParseLoose(string jsonText)
+        // (internal so --audit can exercise it directly)
+        internal IDictionary<string, object> ParseLoose(string jsonText)
         {
             try
             {
@@ -301,7 +302,7 @@ namespace ClickForge
             catch { return null; }
         }
 
-        private static string RepairJson(string s)
+        internal static string RepairJson(string s)
         {
             // A stray double-quote right after a number, e.g.  "x": 3500"  ->  3500
             s = Regex.Replace(s, "(?<=[0-9])\"(?=\\s*[,}\\]])", "");
@@ -311,7 +312,7 @@ namespace ClickForge
         }
 
         // Pull the first balanced {...} object out of arbitrary text.
-        private static string ExtractJsonObject(string text)
+        internal static string ExtractJsonObject(string text)
         {
             int start = text.IndexOf('{');
             if (start < 0) return null;
