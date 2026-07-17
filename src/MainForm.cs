@@ -10,7 +10,7 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "mouseclicker.app";
-        private const string AppVersion = "3.5";
+        private const string AppVersion = "3.6";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
@@ -117,6 +117,8 @@ namespace ClickForge
         private NumericUpDown _recordRepeat;
         private CheckBox _recordLoop;
         private Timer _recordUiTimer;
+        private Timer _recordCountdownTimer;
+        private int _recordCountdown;
         private ComboBox _toggleKeyCombo;
         private ComboBox _stopKeyCombo;
 
@@ -667,9 +669,9 @@ namespace ClickForge
             FlowLayoutPanel s = Ui.Stack();
             s.Controls.Add(Theme.SectionHeader("Record movement + clicks"));
             s.Controls.Add(Ui.Spacer(4));
-            Label rBlurb = Theme.Label("Press Record, then use your mouse anywhere on screen — the cursor path, "
-                + "presses and releases (so click-and-drag works), and the timing are all captured. Input over "
-                + "this window is ignored, so you can still use it. Press Record again (or F8) to stop.", true);
+            Label rBlurb = Theme.Label("Press Record — after a 3-second countdown to position the cursor, use your "
+                + "mouse anywhere on screen. The cursor path, presses and releases (so click-and-drag works), and "
+                + "the timing are all captured; input over this window is ignored. Press Record again (or F8) to stop.", true);
             rBlurb.MaximumSize = new Size(Ui.ContentWidth, 0);
             s.Controls.Add(rBlurb);
             s.Controls.Add(Ui.Spacer(8));
@@ -750,16 +752,44 @@ namespace ClickForge
 
         // ---- Record / playback -------------------------------------------
 
+        private bool RecordCountingDown { get { return _recordCountdownTimer != null; } }
+
         private void ToggleRecording()
         {
-            if (_recorder.IsRecording)
-            {
-                StopRecording();
-                return;
-            }
+            if (_recorder.IsRecording) { StopRecording(); return; }
+            if (RecordCountingDown) { CancelRecordCountdown(); return; }
+
             // Recording, the engine, and playback are mutually exclusive.
             if (_engine.IsRunning) _engine.Stop();
             _player.Stop();
+            BeginRecordCountdown();
+        }
+
+        // A 3-second countdown before recording actually starts, so you can put
+        // the cursor at the intended starting point first.
+        private void BeginRecordCountdown()
+        {
+            _recordCountdown = 3;
+            _recordCountdownTimer = new Timer();
+            _recordCountdownTimer.Interval = 1000;
+            _recordCountdownTimer.Tick += RecordCountdownTick;
+            _recordBtn.Text = "■  Cancel";
+            _recordStatus.ForeColor = Theme.Accent;
+            _recordStatus.Text = "Position your mouse — recording in 3…";
+            _recordCountdownTimer.Start();
+        }
+
+        private void RecordCountdownTick(object sender, EventArgs e)
+        {
+            _recordCountdown--;
+            if (_recordCountdown > 0)
+            {
+                _recordStatus.Text = "Position your mouse — recording in " + _recordCountdown + "…";
+                return;
+            }
+            StopRecordCountdownTimer();
+            // Only clear the previous recording once we truly start (so a
+            // cancelled countdown leaves any earlier recording intact).
             _recorder.Clear();
             _recorder.Start(this);
             _recordBtn.Text = "■  Stop recording";
@@ -767,6 +797,32 @@ namespace ClickForge
             _recordStatus.Text = "Recording… move or click anywhere";
             if (_recordUiTimer != null) _recordUiTimer.Start();
             UpdateRecordUi();
+        }
+
+        private void StopRecordCountdownTimer()
+        {
+            if (_recordCountdownTimer != null)
+            {
+                _recordCountdownTimer.Stop();
+                _recordCountdownTimer.Dispose();
+                _recordCountdownTimer = null;
+            }
+        }
+
+        private void CancelRecordCountdown()
+        {
+            StopRecordCountdownTimer();
+            _recordBtn.Text = "●  Record";
+            _recordStatus.ForeColor = Theme.Muted;
+            _recordStatus.Text = "Cancelled";
+        }
+
+        // Cancel a pending countdown or stop an active recording — used by the
+        // engine/playback/emergency-stop paths that must supersede recording.
+        private void AbortRecording()
+        {
+            if (RecordCountingDown) CancelRecordCountdown();
+            else if (_recorder.IsRecording) StopRecording();
         }
 
         private void StopRecording()
@@ -793,7 +849,7 @@ namespace ClickForge
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            if (_recorder.IsRecording) StopRecording();
+            AbortRecording();
             if (_engine.IsRunning) _engine.Stop();
             int repeat = _recordLoop.Checked ? 0 : (int)_recordRepeat.Value;
             _recordStatus.ForeColor = Theme.Accent;
@@ -1516,7 +1572,7 @@ namespace ClickForge
             // The configured clicker, recording, and macro playback are mutually
             // exclusive — starting one cancels the others.
             _player.Stop();
-            if (_recorder.IsRecording) StopRecording();
+            AbortRecording();
             SyncToProfile();
             ProfileStore.SaveConfig(_profile);
             _clickCount = 0;
@@ -1850,10 +1906,10 @@ namespace ClickForge
                 else if (id == HotkeyManager.ID_STOP)
                 {
                     // Emergency stop halts everything: the clicker, playback,
-                    // and any in-progress recording.
+                    // and any in-progress (or pending) recording.
                     _engine.Stop();
                     _player.Stop();
-                    if (_recorder.IsRecording) StopRecording();
+                    AbortRecording();
                 }
             });
         }
@@ -1933,6 +1989,7 @@ namespace ClickForge
             _engine.Stop();
             _player.Stop();
             if (_recordUiTimer != null) _recordUiTimer.Stop();
+            StopRecordCountdownTimer();
             if (_recorder.IsRecording) _recorder.Stop();
             try { SyncToProfile(); ProfileStore.SaveConfig(_profile); }
             catch { }

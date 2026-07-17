@@ -41,6 +41,7 @@ Tons of options for **how** to click, **where** to move the cursor, and **when**
 - Optional target jitter and return-to-origin
 
 ### Record & replay
+- A **3-second countdown** after you press Record lets you position the cursor at the starting point before capture begins
 - **Record** your real mouse input system-wide — the **cursor movement path** (sampled) plus every **press and release** with its button and timing
 - **Click-and-drag is supported** — presses and releases are captured separately, so playback reproduces drags, not just clicks
 - **Play back** the sequence a fixed number of times or on a **loop**, retracing the movement and reproducing the recorded pauses
