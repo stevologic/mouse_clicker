@@ -173,3 +173,45 @@ capture keystrokes, which review may flag as keylogger-like):
 > in-app.
 
 Once approved, follow the setup steps above.
+
+## Alternative: apply by email
+
+If the web form is inconvenient, you can also reach SignPath at
+**info@signpath.io**. A ready-to-send message (review, then send from your own
+address — that address is your identity for the application, so it has to be
+sent by you):
+
+> **To:** info@signpath.io
+> **Subject:** SignPath Foundation OSS code-signing application — mouseclicker.app
+>
+> Hello,
+>
+> I'd like to apply for free code signing through the SignPath Foundation for my
+> open-source project, mouseclicker.app.
+>
+> - Project: mouseclicker.app
+> - Repository: https://github.com/stevologic/mouse_clicker
+> - Website: https://mouseclicker.app
+> - License: MIT (OSI-approved), no commercial dual-licensing
+> - Build: reproducible in GitHub Actions on windows-latest via build.ps1; a
+>   single self-contained ~130 KB MouseClicker.exe (.NET Framework WinForms)
+> - Code signing policy: https://github.com/stevologic/mouse_clicker/blob/main/CODE_SIGNING_POLICY.md
+> - MFA is enabled on my GitHub account.
+>
+> mouseclicker.app is a free, no-install Windows auto clicker: it automates mouse
+> clicks and cursor movement with configurable buttons/timing/targeting, can
+> record and replay mouse (and, opt-in, keyboard) macros, and can turn a
+> plain-English description into a click pattern using the user's own AI key or a
+> local model.
+>
+> On the two things a manual review may ask about: (1) auto-clickers are
+> sometimes heuristically labeled "PUA," but this is a general-purpose,
+> source-available tool that runs without elevation, only performs the input the
+> user configures, and does not hide, persist, self-update, or exfiltrate data —
+> a Microsoft Defender scan is clean. (2) Keyboard capture is strictly opt-in
+> (off by default), stays on the user's machine, and is never transmitted;
+> details are in the code-signing policy.
+>
+> Happy to provide anything else you need. Thank you for supporting open source!
+>
+> [your name]
