@@ -89,9 +89,15 @@ namespace ClickForge
         public int JitterRadius { get; set; }         // random offset per target
         public bool ReturnToOrigin { get; set; }
 
-        // Hotkeys (virtual-key codes; F6 / F8 by default).
+        // Hotkeys (virtual-key codes; F6 / F8 / F7 by default).
         public int ToggleHotkeyVk { get; set; }
         public int StopHotkeyVk { get; set; }
+        public int RecordHotkeyVk { get; set; }
+
+        // Record tab settings.
+        public bool RecordKeyboard { get; set; }  // also capture keystrokes
+        public bool RecordRelative { get; set; }  // anchor to the active window
+        public double PlaybackSpeed { get; set; } // 1.0 = as recorded
 
         // Window behavior: minimize into the system tray (keep running in the
         // background) instead of the taskbar.
@@ -142,6 +148,10 @@ namespace ClickForge
 
             ToggleHotkeyVk = 0x75; // VK_F6
             StopHotkeyVk = 0x77;   // VK_F8
+            RecordHotkeyVk = 0x76; // VK_F7
+            RecordKeyboard = false;
+            RecordRelative = false;
+            PlaybackSpeed = 1.0;
 
             MinimizeToTray = true;
             ShowHud = true;
@@ -226,6 +236,10 @@ namespace ClickForge
 
             MovementDurationMs = Clamp(MovementDurationMs, 0, 60000);
             JitterRadius = Clamp(JitterRadius, 0, 5000);
+
+            if (PlaybackSpeed <= 0 || double.IsNaN(PlaybackSpeed)) PlaybackSpeed = 1.0;
+            if (PlaybackSpeed > 16) PlaybackSpeed = 16;
+            if (RecordHotkeyVk < 0 || RecordHotkeyVk > 255) RecordHotkeyVk = 0x76;
         }
 
         private static int Clamp(int v, int lo, int hi)

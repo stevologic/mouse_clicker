@@ -10,7 +10,7 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "mouseclicker.app";
-        private const string AppVersion = "3.6";
+        private const string AppVersion = "3.7";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
@@ -119,8 +119,20 @@ namespace ClickForge
         private Timer _recordUiTimer;
         private Timer _recordCountdownTimer;
         private int _recordCountdown;
+        private ComboBox _speedCombo;
+        private CheckBox _recordKbCheck;
+        private CheckBox _recordRelCheck;
+        private ListBox _macroList;
+        private TextBox _macroName;
+        // Metadata of the current recording (for window-relative playback / save).
+        private bool _macroRelative;
+        private string _macroTitle = "";
+        private int _macroOriginX, _macroOriginY;
         private ComboBox _toggleKeyCombo;
         private ComboBox _stopKeyCombo;
+        private ComboBox _recordKeyCombo;
+        private LinkLabel _updateLink;
+        private string _updateUrl;
 
         // Point capture
         private Timer _captureTimer;
@@ -183,7 +195,7 @@ namespace ClickForge
             Activated += delegate { _active = true; };
             Deactivate += delegate { _active = false; };
 
-            Load += delegate { SetupHotkeys(); MinimumSize = Size; };
+            Load += delegate { SetupHotkeys(); MinimumSize = Size; CheckForUpdateAsync(); };
             Resize += delegate { OnFormResized(); HandleMinimizeToTray(); };
             FormClosing += OnClosing;
         }
@@ -670,8 +682,8 @@ namespace ClickForge
             s.Controls.Add(Theme.SectionHeader("Record movement + clicks"));
             s.Controls.Add(Ui.Spacer(4));
             Label rBlurb = Theme.Label("Press Record — after a 3-second countdown to position the cursor, use your "
-                + "mouse anywhere on screen. The cursor path, presses and releases (so click-and-drag works), and "
-                + "the timing are all captured; input over this window is ignored. Press Record again (or F8) to stop.", true);
+                + "mouse anywhere. Movement, presses and releases (click-and-drag), and timing are captured; input "
+                + "over this window is ignored. Press Record again, or F7, to stop.", true);
             rBlurb.MaximumSize = new Size(Ui.ContentWidth, 0);
             s.Controls.Add(rBlurb);
             s.Controls.Add(Ui.Spacer(8));
@@ -685,34 +697,68 @@ namespace ClickForge
             _recordStatus.AutoSize = true;
             s.Controls.Add(Ui.RowMulti("", _recordBtn, _recordStatus));
 
+            // Record options (full-width row so the labels never clip).
+            _recordKbCheck = Ui.Check("Also record keystrokes");
+            _recordKbCheck.Margin = new Padding(0, 0, 26, 0);
+            _recordRelCheck = Ui.Check("Anchor to the active window");
+            FlowLayoutPanel recOpts = new FlowLayoutPanel();
+            recOpts.FlowDirection = FlowDirection.LeftToRight;
+            recOpts.WrapContents = false;
+            recOpts.AutoSize = true;
+            recOpts.Margin = new Padding(28, 2, 0, 2);
+            recOpts.Controls.Add(_recordKbCheck);
+            recOpts.Controls.Add(_recordRelCheck);
+            s.Controls.Add(recOpts);
+
             _recordCountLbl = Theme.Label("Nothing recorded yet.", true);
             _recordCountLbl.MaximumSize = new Size(Ui.ContentWidth, 0);
             s.Controls.Add(Ui.Row("", _recordCountLbl));
 
-            s.Controls.Add(Ui.Spacer(12));
+            s.Controls.Add(Ui.Spacer(10));
             s.Controls.Add(Theme.SectionHeader("Play back"));
             s.Controls.Add(Ui.Spacer(6));
 
-            _recordRepeat = Ui.Num(1, 1000000, 100);
-            _recordLoop = Ui.Check("Loop until stopped");
+            _recordRepeat = Ui.Num(1, 1000000, 90);
+            _recordLoop = Ui.Check("Loop");
             _recordLoop.CheckedChanged += delegate { _recordRepeat.Enabled = !_recordLoop.Checked; };
             Label timesSuffix = Ui.Suffix("times");
-            timesSuffix.Width = 44; // the default 34px clips "times" to "time"
-            s.Controls.Add(Ui.RowMulti("Repeat", _recordRepeat, timesSuffix, _recordLoop));
+            timesSuffix.Width = 40;
+            _speedCombo = Ui.Combo(80, "0.25x", "0.5x", "1x", "2x", "4x");
+            _speedCombo.SelectedIndex = 2; // 1x
+            Label speedLbl = Ui.Suffix("speed");
+            speedLbl.Width = 48;
+            s.Controls.Add(Ui.RowMulti("Repeat", _recordRepeat, timesSuffix, _recordLoop, speedLbl, _speedCombo));
 
-            _playBtn = Ui.SmallButton("▶  Play", 110);
+            _playBtn = Ui.SmallButton("▶  Play", 100);
             _playBtn.Height = 30;
             _playBtn.Click += delegate { TogglePlayback(); };
-            Button clearRec = Ui.SmallButton("Clear", 80);
+            Button clearRec = Ui.SmallButton("Clear", 72);
             clearRec.Height = 30;
             clearRec.Click += delegate { ClearRecording(); };
-            Button toPoints = Ui.SmallButton("Send to Movement points", 190);
+            Button toPoints = Ui.SmallButton("Send to Movement points", 180);
             toPoints.Height = 30;
             toPoints.Click += delegate { SendRecordingToPoints(); };
             s.Controls.Add(Ui.RowMulti("", _playBtn, clearRec, toPoints));
 
-            Label rHint = Theme.Label("Playback retraces the movement and clicks. Press F8 (or Stop) to halt it.", true);
-            s.Controls.Add(Ui.Row("", rHint));
+            s.Controls.Add(Ui.Spacer(10));
+            s.Controls.Add(Theme.SectionHeader("Saved recordings"));
+            s.Controls.Add(Ui.Spacer(6));
+            _macroList = new ListBox();
+            _macroList.Width = 300;
+            _macroList.Height = 66;
+            _macroList.BackColor = Theme.PanelAlt;
+            _macroList.ForeColor = Theme.Text;
+            _macroList.BorderStyle = BorderStyle.FixedSingle;
+            _macroList.DoubleClick += delegate { LoadSelectedMacro(); };
+            s.Controls.Add(Ui.Row("Recordings", _macroList));
+            _macroName = Ui.Text(150, false);
+            Button macroSave = Ui.SmallButton("Save", 62);
+            macroSave.Click += delegate { SaveMacro(); };
+            Button macroLoad = Ui.SmallButton("Load", 62);
+            macroLoad.Click += delegate { LoadSelectedMacro(); };
+            Button macroDel = Ui.SmallButton("Delete", 66);
+            macroDel.Click += delegate { DeleteSelectedMacro(); };
+            s.Controls.Add(Ui.RowMulti("Save as", _macroName, macroSave, macroLoad, macroDel));
 
             // Refresh the live counts on a light timer rather than from the hook
             // itself — the low-level hook proc must stay fast (it sees every
@@ -791,6 +837,15 @@ namespace ClickForge
             // Only clear the previous recording once we truly start (so a
             // cancelled countdown leaves any earlier recording intact).
             _recorder.Clear();
+            _recorder.RecordKeyboard = _recordKbCheck != null && _recordKbCheck.Checked;
+            _recorder.RecordRelative = _recordRelCheck != null && _recordRelCheck.Checked;
+            // Never record our own global hotkeys as keystrokes.
+            _recorder.SetReservedKeys(new int[]
+            {
+                SelectedVk(_toggleKeyCombo, 0x75),
+                SelectedVk(_stopKeyCombo, 0x77),
+                SelectedVk(_recordKeyCombo, 0x76)
+            });
             _recorder.Start(this);
             _recordBtn.Text = "■  Stop recording";
             _recordStatus.ForeColor = Theme.Accent;
@@ -830,6 +885,11 @@ namespace ClickForge
             if (!_recorder.IsRecording) return;
             _recorder.Stop();
             if (_recordUiTimer != null) _recordUiTimer.Stop();
+            // Capture the just-recorded macro's window-relative metadata.
+            _macroRelative = _recordRelCheck != null && _recordRelCheck.Checked;
+            _macroTitle = _recorder.WindowTitle;
+            _macroOriginX = _recorder.OriginX;
+            _macroOriginY = _recorder.OriginY;
             _recordBtn.Text = "●  Record";
             _recordStatus.ForeColor = Theme.Muted;
             _recordStatus.Text = _recorder.Count > 0 ? "Recorded " + RecordSummary() : "Nothing recorded";
@@ -852,11 +912,54 @@ namespace ClickForge
             AbortRecording();
             if (_engine.IsRunning) _engine.Stop();
             int repeat = _recordLoop.Checked ? 0 : (int)_recordRepeat.Value;
+            double speed = SelectedSpeed();
+            int dx, dy;
+            ComputePlaybackOffset(out dx, out dy);
             _recordStatus.ForeColor = Theme.Accent;
             _recordStatus.Text = "Playing…";
-            _player.Play(_recorder.Steps, repeat);
+            _player.Play(_recorder.Steps, repeat, speed, dx, dy);
             _playBtn.Text = "■  Stop";
             UpdateStartButton(); // footer reflects playback on the Record tab
+        }
+
+        private double SelectedSpeed()
+        {
+            // Combo items are "0.25x", "0.5x", "1x", "2x", "4x".
+            if (_speedCombo == null) return 1.0;
+            string t = (_speedCombo.Text ?? "").Replace("x", "").Trim();
+            double v;
+            if (double.TryParse(t, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out v) && v > 0)
+                return v;
+            return 1.0;
+        }
+
+        private void SetSpeedCombo(double speed)
+        {
+            if (_speedCombo == null) return;
+            int idx = _speedCombo.Items.IndexOf(FormatSpeed(speed));
+            _speedCombo.SelectedIndex = idx >= 0 ? idx : 2; // default 1x
+        }
+
+        private static string FormatSpeed(double s)
+        {
+            if (s == 0.25) return "0.25x";
+            if (s == 0.5) return "0.5x";
+            if (s == 2.0) return "2x";
+            if (s == 4.0) return "4x";
+            return "1x";
+        }
+
+        // For a window-relative recording, offset playback by how far the
+        // anchor window has moved since it was recorded (0,0 otherwise).
+        private void ComputePlaybackOffset(out int dx, out int dy)
+        {
+            dx = 0; dy = 0;
+            if (!_macroRelative || string.IsNullOrEmpty(_macroTitle)) return;
+            NativeMethods.RECT? r = WindowTools.FindWindowRectByTitle(_macroTitle);
+            if (r == null) return;
+            dx = r.Value.Left - _macroOriginX;
+            dy = r.Value.Top - _macroOriginY;
         }
 
         private void ClearRecording()
@@ -897,6 +1000,94 @@ namespace ClickForge
             _recordCountLbl.Text = _recorder.Count == 0
                 ? "Nothing recorded yet."
                 : RecordSummary() + " recorded.";
+        }
+
+        // ---- Saved recordings --------------------------------------------
+
+        private void RefreshMacros()
+        {
+            if (_macroList == null) return;
+            _macroList.Items.Clear();
+            foreach (string n in MacroStore.ListNames())
+                _macroList.Items.Add(n);
+        }
+
+        private void SaveMacro()
+        {
+            string name = _macroName.Text.Trim();
+            if (string.IsNullOrEmpty(name))
+            {
+                MessageBox.Show(this, "Enter a name first.", AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (_recorder.Count == 0)
+            {
+                MessageBox.Show(this, "Record something first.", AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            Macro m = new Macro();
+            m.Steps = new List<RecordedStep>(_recorder.Steps);
+            m.Relative = _macroRelative;
+            m.WindowTitle = _macroTitle ?? "";
+            m.OriginX = _macroOriginX;
+            m.OriginY = _macroOriginY;
+            try
+            {
+                MacroStore.Save(name, m);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not save \"" + name + "\": " + ex.Message,
+                    AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            RefreshMacros();
+            _macroName.Text = "";
+            _recordStatus.ForeColor = Theme.Good;
+            _recordStatus.Text = "Saved recording \"" + name + "\"";
+        }
+
+        private void LoadSelectedMacro()
+        {
+            object sel = _macroList != null ? _macroList.SelectedItem : null;
+            if (sel == null) return;
+            try
+            {
+                Macro m = MacroStore.Load(sel.ToString());
+                if (m == null) return;
+                _player.Stop();
+                AbortRecording();
+                _recorder.Adopt(m);
+                _macroRelative = m.Relative;
+                _macroTitle = m.WindowTitle ?? "";
+                _macroOriginX = m.OriginX;
+                _macroOriginY = m.OriginY;
+                if (_recordRelCheck != null) _recordRelCheck.Checked = m.Relative;
+                UpdateRecordUi();
+                _recordStatus.ForeColor = Theme.Good;
+                _recordStatus.Text = "Loaded \"" + sel + "\" — " + RecordSummary();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not load: " + ex.Message,
+                    AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void DeleteSelectedMacro()
+        {
+            object sel = _macroList != null ? _macroList.SelectedItem : null;
+            if (sel == null) return;
+            try
+            {
+                MacroStore.Delete(sel.ToString());
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not delete: " + ex.Message,
+                    AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            RefreshMacros();
         }
 
         private Control BuildAiPage()
@@ -1048,6 +1239,9 @@ namespace ClickForge
             _stopKeyCombo = HotkeyCombo();
             _stopKeyCombo.SelectedIndexChanged += delegate { ApplyHotkeysFromUi(); };
             s.Controls.Add(Ui.Row("Emergency stop", _stopKeyCombo));
+            _recordKeyCombo = HotkeyCombo();
+            _recordKeyCombo.SelectedIndexChanged += delegate { ApplyHotkeysFromUi(); };
+            s.Controls.Add(Ui.Row("Record / play", _recordKeyCombo));
             Label hkNote = Theme.Label("Hotkeys work even when " + AppName + " is in the background.", true);
             s.Controls.Add(Ui.Row("", hkNote));
             return s;
@@ -1062,6 +1256,23 @@ namespace ClickForge
             Label name = Theme.Label(AppName + " " + AppVersion, false);
             name.Font = Theme.TitleFont;
             s.Controls.Add(name);
+
+            // Update notice — hidden until a newer release is found.
+            _updateLink = new LinkLabel();
+            _updateLink.Text = "";
+            _updateLink.AutoSize = true;
+            _updateLink.LinkColor = Theme.Good;
+            _updateLink.ActiveLinkColor = Theme.Text;
+            _updateLink.BackColor = Color.Transparent;
+            _updateLink.Visible = false;
+            _updateLink.Margin = new Padding(0, 2, 0, 0);
+            _updateLink.LinkClicked += delegate
+            {
+                if (!string.IsNullOrEmpty(_updateUrl))
+                    try { System.Diagnostics.Process.Start(_updateUrl); } catch { }
+            };
+            s.Controls.Add(_updateLink);
+
             s.Controls.Add(Ui.Spacer(4));
 
             string[] lines =
@@ -1228,9 +1439,14 @@ namespace ClickForge
 
             SelectHotkey(_toggleKeyCombo, _profile.ToggleHotkeyVk);
             SelectHotkey(_stopKeyCombo, _profile.StopHotkeyVk);
+            SelectHotkey(_recordKeyCombo, _profile.RecordHotkeyVk);
             if (_minTrayCheck != null) _minTrayCheck.Checked = _profile.MinimizeToTray;
             if (_hudCheck != null) _hudCheck.Checked = _profile.ShowHud;
+            if (_recordKbCheck != null) _recordKbCheck.Checked = _profile.RecordKeyboard;
+            if (_recordRelCheck != null) _recordRelCheck.Checked = _profile.RecordRelative;
+            SetSpeedCombo(_profile.PlaybackSpeed);
 
+            RefreshMacros();
             RefreshPoints();
             UpdateActionLabels();
             UpdateCps();
@@ -1276,8 +1492,12 @@ namespace ClickForge
 
             _profile.ToggleHotkeyVk = SelectedVk(_toggleKeyCombo, 0x75);
             _profile.StopHotkeyVk = SelectedVk(_stopKeyCombo, 0x77);
+            _profile.RecordHotkeyVk = SelectedVk(_recordKeyCombo, 0x76);
             if (_minTrayCheck != null) _profile.MinimizeToTray = _minTrayCheck.Checked;
             if (_hudCheck != null) _profile.ShowHud = _hudCheck.Checked;
+            if (_recordKbCheck != null) _profile.RecordKeyboard = _recordKbCheck.Checked;
+            if (_recordRelCheck != null) _profile.RecordRelative = _recordRelCheck.Checked;
+            _profile.PlaybackSpeed = SelectedSpeed();
             _profile.Normalize();
         }
 
@@ -1426,6 +1646,21 @@ namespace ClickForge
         {
             if (string.IsNullOrEmpty(s)) return "Working";
             return char.ToUpper(s[0]) + s.Substring(1);
+        }
+
+        // Quietly check GitHub for a newer release; show a link on About if so.
+        private async void CheckForUpdateAsync()
+        {
+            UpdateInfo info;
+            try { info = await UpdateChecker.CheckAsync(AppVersion); }
+            catch { return; }
+            if (info == null || !info.Available || _updateLink == null) return;
+            UiInvoke(delegate
+            {
+                _updateUrl = info.Url;
+                _updateLink.Text = "▲  Update available: " + info.LatestTag + " — download";
+                _updateLink.Visible = true;
+            });
         }
 
         private void SelectHotkey(ComboBox cb, int vk)
@@ -1895,7 +2130,8 @@ namespace ClickForge
             if (_hotkeys == null) return;
             int toggle = SelectedVk(_toggleKeyCombo, 0x75);
             int stop = SelectedVk(_stopKeyCombo, 0x77);
-            _hotkeys.Register(toggle, stop);
+            int record = SelectedVk(_recordKeyCombo, 0x76);
+            _hotkeys.Register(toggle, stop, record);
         }
 
         private void OnHotkey(int id)
@@ -1903,6 +2139,7 @@ namespace ClickForge
             UiInvoke(delegate
             {
                 if (id == HotkeyManager.ID_TOGGLE) ToggleRun();
+                else if (id == HotkeyManager.ID_RECORD) ToggleRecording();
                 else if (id == HotkeyManager.ID_STOP)
                 {
                     // Emergency stop halts everything: the clicker, playback,

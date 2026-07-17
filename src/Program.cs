@@ -235,7 +235,7 @@ namespace ClickForge
                 var player = new MacroPlayer();
                 bool[] done = { false };
                 player.Finished += delegate(string reason) { done[0] = true; };
-                player.Play(steps, 1);
+                player.Play(steps, 1, 1.0, 0, 0);
                 for (int i = 0; i < 150 && !done[0]; i++) Thread.Sleep(20);
 
                 NativeMethods.POINT after = InputSimulator.GetCursor();
@@ -435,6 +435,63 @@ namespace ClickForge
                 capr.Capture(WM_MOVE, 0, 0, false, false, 0);
                 RecordedStep big = capr.Capture(WM_L, 500, 500, false, false, 999999);
                 check("Capture caps huge idle gaps at 10000ms", big != null && big.DelayMs == 10000);
+
+                // ---- CaptureKey (keyboard recording) -----------------------
+                var kr = new MacroRecorder();
+                kr.SetReservedKeys(new int[] { 0x77 }); // F8 reserved
+                check("CaptureKey ignores injected keys",
+                    kr.CaptureKey(NativeMethods.WM_KEYDOWN, 0x41, true, 100) == null && kr.Count == 0);
+                check("CaptureKey ignores reserved hotkeys",
+                    kr.CaptureKey(NativeMethods.WM_KEYDOWN, 0x77, false, 100) == null && kr.Count == 0);
+                RecordedStep k1 = kr.CaptureKey(NativeMethods.WM_KEYDOWN, 0x41, false, 100);
+                check("CaptureKey records a key down",
+                    k1 != null && k1.Kind == StepKind.KeyDown && k1.Vk == 0x41 && k1.DelayMs == 0);
+                check("CaptureKey collapses auto-repeat down",
+                    kr.CaptureKey(NativeMethods.WM_KEYDOWN, 0x41, false, 130) == null);
+                RecordedStep k2 = kr.CaptureKey(NativeMethods.WM_KEYUP, 0x41, false, 200);
+                check("CaptureKey records a key up with timing",
+                    k2 != null && k2.Kind == StepKind.KeyUp && k2.Vk == 0x41 && k2.DelayMs == 100);
+                check("CaptureKey tallies key presses", kr.KeyCount == 1);
+
+                // ---- MacroPlayer.ScaleDelay --------------------------------
+                check("ScaleDelay 2x halves the wait", MacroPlayer.ScaleDelay(1000, 2.0) == 500);
+                check("ScaleDelay 0.5x doubles the wait", MacroPlayer.ScaleDelay(1000, 0.5) == 2000);
+                check("ScaleDelay 1x unchanged", MacroPlayer.ScaleDelay(750, 1.0) == 750);
+                check("ScaleDelay guards speed <= 0", MacroPlayer.ScaleDelay(500, 0) == 500);
+
+                // ---- UpdateChecker.IsNewer ---------------------------------
+                check("IsNewer detects higher minor", UpdateChecker.IsNewer("v3.7", "3.6"));
+                check("IsNewer detects higher major", UpdateChecker.IsNewer("v4.0", "3.9"));
+                check("IsNewer is false for same version", !UpdateChecker.IsNewer("v3.6", "3.6"));
+                check("IsNewer is false for older", !UpdateChecker.IsNewer("v3.5", "3.6"));
+                check("IsNewer handles extra components", UpdateChecker.IsNewer("3.6.1", "3.6"));
+
+                // ---- MacroStore round-trip + Adopt -------------------------
+                var macro = new Macro();
+                macro.Relative = true;
+                macro.WindowTitle = "Notepad";
+                macro.OriginX = 100; macro.OriginY = 200;
+                macro.Steps.Add(new RecordedStep { Kind = StepKind.Move, X = 10, Y = 20, DelayMs = 0 });
+                macro.Steps.Add(new RecordedStep { Kind = StepKind.Down, X = 30, Y = 40, Button = MouseButton.Right, DelayMs = 15 });
+                macro.Steps.Add(new RecordedStep { Kind = StepKind.KeyDown, Vk = 0x41, DelayMs = 5 });
+                macro.Steps.Add(new RecordedStep { Kind = StepKind.KeyUp, Vk = 0x41, DelayMs = 5 });
+                macro.Steps.Add(new RecordedStep { Kind = StepKind.Up, X = 30, Y = 40, Button = MouseButton.Right, DelayMs = 5 });
+                MacroStore.Save("audit-macro-test", macro);
+                Macro loadedM = MacroStore.Load("audit-macro-test");
+                check("MacroStore round-trips metadata",
+                    loadedM != null && loadedM.Relative && loadedM.WindowTitle == "Notepad"
+                    && loadedM.OriginX == 100 && loadedM.OriginY == 200);
+                check("MacroStore round-trips steps (kind/button/vk)",
+                    loadedM != null && loadedM.Steps.Count == 5
+                    && loadedM.Steps[1].Kind == StepKind.Down && loadedM.Steps[1].Button == MouseButton.Right && loadedM.Steps[1].X == 30
+                    && loadedM.Steps[2].Kind == StepKind.KeyDown && loadedM.Steps[2].Vk == 0x41);
+                var ar = new MacroRecorder();
+                ar.Adopt(loadedM);
+                check("Adopt recomputes counts + metadata",
+                    ar.Count == 5 && ar.ClickCount == 1 && ar.MoveCount == 1 && ar.KeyCount == 1
+                    && ar.WindowTitle == "Notepad" && ar.OriginX == 100);
+                MacroStore.Delete("audit-macro-test");
+                check("MacroStore deletes", Array.IndexOf(MacroStore.ListNames(), "audit-macro-test") < 0);
 
                 // ---- HumanMotion (moves the real cursor; restored below) ----
                 NativeMethods.POINT before = InputSimulator.GetCursor();

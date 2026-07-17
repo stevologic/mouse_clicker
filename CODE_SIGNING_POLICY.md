@@ -37,11 +37,20 @@ SignPath accounts.
 
 mouseclicker.app collects **no personal data**. It runs entirely on your machine
 and makes **no network connections except those you explicitly initiate** — for
-example, sending a prompt to an AI provider using *your own* API key, or talking
-to a local Ollama server you run. Settings are stored locally in
-`%APPDATA%\MouseClicker`. There is **no telemetry, no analytics, and no
-auto-update**. The program **transfers no information to us or any third party
-without your consent.**
+example, sending a prompt to an AI provider using *your own* API key, talking to
+a local Ollama server you run, or the About tab's optional check of GitHub's
+public releases API for a newer version (which sends nothing about you). Settings
+and recordings are stored locally under `%APPDATA%\MouseClicker`. There is **no
+telemetry and no auto-update** (update *checks* are link-only). The program
+**transfers no information to us or any third party without your consent.**
+
+**About the optional keyboard recording.** The Record feature can, *only when you
+tick the off-by-default "Also record keystrokes" checkbox*, capture keystrokes so
+a macro can reproduce them. This is standard macro-recorder behavior, never
+enabled without your action, and the captured input **stays on your machine** —
+it is only written to a local recording file you choose to save and is never
+transmitted. It is not a keylogger: nothing is captured unless you start a
+recording with that option on.
 
 ## Uninstalling
 

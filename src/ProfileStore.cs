@@ -116,7 +116,7 @@ namespace ClickForge
             }
         }
 
-        private static string Sanitize(string name)
+        internal static string Sanitize(string name)
         {
             if (string.IsNullOrEmpty(name))
                 return "profile";

@@ -47,6 +47,29 @@ namespace ClickForge
             SendButton(button, false);
         }
 
+        public static void KeyDown(int vk)
+        {
+            SendKey(vk, false);
+        }
+
+        public static void KeyUp(int vk)
+        {
+            SendKey(vk, true);
+        }
+
+        private static void SendKey(int vk, bool up)
+        {
+            var input = new NativeMethods.INPUT();
+            input.type = NativeMethods.INPUT_KEYBOARD;
+            input.u.ki.wVk = (ushort)vk;
+            input.u.ki.wScan = 0;
+            input.u.ki.dwFlags = up ? NativeMethods.KEYEVENTF_KEYUP : 0;
+            input.u.ki.time = 0;
+            input.u.ki.dwExtraInfo = IntPtr.Zero;
+            var arr = new NativeMethods.INPUT[] { input };
+            NativeMethods.SendInput(1, arr, System.Runtime.InteropServices.Marshal.SizeOf(typeof(NativeMethods.INPUT)));
+        }
+
         // Positive notches scroll up / away from the user, negative scroll down.
         public static void ScrollWheel(int notches)
         {

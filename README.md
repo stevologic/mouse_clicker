@@ -44,16 +44,21 @@ Tons of options for **how** to click, **where** to move the cursor, and **when**
 - A **3-second countdown** after you press Record lets you position the cursor at the starting point before capture begins
 - **Record** your real mouse input system-wide — the **cursor movement path** (sampled) plus every **press and release** with its button and timing
 - **Click-and-drag is supported** — presses and releases are captured separately, so playback reproduces drags, not just clicks
+- **Optionally record keystrokes too** (opt-in checkbox, off by default) — turns it into a full mouse-and-keyboard macro recorder
+- **Adjustable playback speed** — replay at 0.25× / 0.5× / 1× / 2× / 4×
+- **Save, name, and reload recordings** (stored as JSON under `%APPDATA%\MouseClicker\macros`) to build a library of macros
+- **Window-relative recording** — anchor a recording to the app you clicked, so playback still lands correctly if that window has since moved
 - **Play back** the sequence a fixed number of times or on a **loop**, retracing the movement and reproducing the recorded pauses
 - Input over the app's own window is ignored while recording, so the UI stays usable
 - **Send to Movement points** to hand the recorded press locations to the point-sequence engine
-- `F8` (or Stop) halts playback instantly
+- `F7` records/plays and `F8` (or Stop) halts — all global
 
 ### Control
 - The big **Start** button (and `F6`) runs whatever the current tab is set up for — the configured clicker, or **playback of your recording** on the Record tab
-- System-wide **global hotkeys** (default `F6` = start/stop, `F8` = emergency stop) that work even in the background
-- Save and load named **profiles**
+- System-wide **global hotkeys** (default `F6` = start/stop, `F7` = record/play, `F8` = emergency stop) that work even in the background
+- Save and load named **profiles** *and* recordings
 - **Minimize to the system tray** to keep clicking in the background
+- **Update check** — the About tab quietly notes when a newer release is available (link only, never auto-downloads)
 - Every tab fits on screen with **no scrolling**
 - Multi-monitor aware, DPI-aware (true physical-pixel coordinates)
 
