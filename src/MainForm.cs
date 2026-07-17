@@ -10,7 +10,7 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "mouseclicker.app";
-        private const string AppVersion = "3.4";
+        private const string AppVersion = "3.5";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
@@ -477,6 +477,8 @@ namespace ClickForge
                 _navActive = idx;
                 _navPillTarget = _navRects[idx].Y;
             }
+            // The footer Start button's action depends on the active tab.
+            if (_startButton != null) UpdateStartButton();
         }
 
         // ---- Pages -------------------------------------------------------
@@ -665,9 +667,9 @@ namespace ClickForge
             FlowLayoutPanel s = Ui.Stack();
             s.Controls.Add(Theme.SectionHeader("Record movement + clicks"));
             s.Controls.Add(Ui.Spacer(4));
-            Label rBlurb = Theme.Label("Press Record, then move and click anywhere on screen — the cursor path, "
-                + "each click's button, and the timing are all captured. Input over this window is ignored, "
-                + "so you can still use it. Press Record again (or F8) to stop.", true);
+            Label rBlurb = Theme.Label("Press Record, then use your mouse anywhere on screen — the cursor path, "
+                + "presses and releases (so click-and-drag works), and the timing are all captured. Input over "
+                + "this window is ignored, so you can still use it. Press Record again (or F8) to stop.", true);
             rBlurb.MaximumSize = new Size(Ui.ContentWidth, 0);
             s.Controls.Add(rBlurb);
             s.Controls.Add(Ui.Spacer(8));
@@ -728,7 +730,13 @@ namespace ClickForge
             };
             _player.Finished += delegate(string reason)
             {
-                UiInvoke(delegate { _playBtn.Text = "▶  Play"; _recordStatus.ForeColor = Theme.Muted; _recordStatus.Text = reason; });
+                UiInvoke(delegate
+                {
+                    _playBtn.Text = "▶  Play";
+                    _recordStatus.ForeColor = Theme.Muted;
+                    _recordStatus.Text = reason;
+                    UpdateStartButton(); // footer back to Play/Start for the tab
+                });
             };
             return s;
         }
@@ -788,10 +796,11 @@ namespace ClickForge
             if (_recorder.IsRecording) StopRecording();
             if (_engine.IsRunning) _engine.Stop();
             int repeat = _recordLoop.Checked ? 0 : (int)_recordRepeat.Value;
-            _playBtn.Text = "■  Stop";
             _recordStatus.ForeColor = Theme.Accent;
             _recordStatus.Text = "Playing…";
             _player.Play(_recorder.Steps, repeat);
+            _playBtn.Text = "■  Stop";
+            UpdateStartButton(); // footer reflects playback on the Record tab
         }
 
         private void ClearRecording()
@@ -817,7 +826,7 @@ namespace ClickForge
             SyncToProfile();
             _profile.Points.Clear();
             foreach (RecordedStep st in _recorder.Steps)
-                if (st.Kind == StepKind.Click)
+                if (st.Kind == StepKind.Down)
                     _profile.Points.Add(new ClickPoint(st.X, st.Y));
             _profile.PositionMode = PositionMode.PointSequence;
             LoadToControls();
@@ -1477,7 +1486,24 @@ namespace ClickForge
 
         // ---- Engine control ----------------------------------------------
 
+        // True when the Record tab is the active page.
+        private bool OnRecordTab()
+        {
+            return _navActive >= 0 && _navActive < NavNames.Length && NavNames[_navActive] == "Record";
+        }
+
+        // The footer Start button (and the F6 hotkey) act on whatever the
+        // current tab is set up to do: on the Record tab that's playing back the
+        // recording, everywhere else it's the configured clicker.
         private void ToggleRun()
+        {
+            if (OnRecordTab())
+                TogglePlayback();
+            else
+                ToggleEngine();
+        }
+
+        private void ToggleEngine()
         {
             if (_engine.IsRunning)
                 _engine.Stop();
@@ -1538,9 +1564,12 @@ namespace ClickForge
 
         private void UpdateStartButton()
         {
-            bool running = _engine.IsRunning;
-            _startButton.Text = running ? "■   Stop" : "▶   Start";
-            if (running)
+            // The footer button reflects the action of the current tab: play the
+            // recording on the Record tab, otherwise run the clicker.
+            bool onRec = OnRecordTab();
+            bool active = onRec ? _player.IsPlaying : _engine.IsRunning;
+            _startButton.Text = active ? "■   Stop" : (onRec ? "▶   Play" : "▶   Start");
+            if (active)
             {
                 _startButton.ColorA = Color.FromArgb(232, 96, 104);
                 _startButton.ColorB = Color.FromArgb(205, 62, 96);
@@ -1553,9 +1582,10 @@ namespace ClickForge
                 _startButton.Pulsing = false;
             }
             _startButton.Invalidate();
-            if (_pulse != null) _pulse.Active = running;
-            // Hovering the tray icon should tell you whether it's clicking.
-            if (_tray != null) _tray.Text = running ? AppName + " — running" : AppName;
+            if (_pulse != null) _pulse.Active = active;
+            // Hovering the tray icon should tell you whether it's active.
+            if (_tray != null) _tray.Text = (_engine.IsRunning || _player.IsPlaying)
+                ? AppName + " — running" : AppName;
         }
 
         private void ResetIdleStatus()
@@ -1851,7 +1881,7 @@ namespace ClickForge
             menu.Items.Add(open);
             menu.Items.Add(new ToolStripSeparator());
             _trayToggleItem = new ToolStripMenuItem("Start clicking", null,
-                delegate { ToggleRun(); });
+                delegate { ToggleEngine(); });
             menu.Items.Add(_trayToggleItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(new ToolStripMenuItem("Exit", null,

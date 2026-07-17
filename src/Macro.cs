@@ -9,12 +9,15 @@ namespace ClickForge
     public enum StepKind
     {
         Move = 0,
-        Click = 1
+        Down = 1,   // mouse button pressed
+        Up = 2      // mouse button released
     }
 
-    // One captured event: a cursor move, or a click. DelayMs is how long to wait
-    // before performing this step (reproducing the recorded timing). Button is
-    // only meaningful when Kind == Click.
+    // One captured event: a cursor move, a button press, or a button release.
+    // DelayMs is how long to wait before performing this step (reproducing the
+    // recorded timing). Down + moves + Up together reproduce a click-and-drag;
+    // a Down immediately followed by an Up is a plain click. Button is only
+    // meaningful for Down/Up.
     public class RecordedStep
     {
         public StepKind Kind { get; set; }
@@ -92,7 +95,10 @@ namespace ClickForge
                 if (msg == NativeMethods.WM_MOUSEMOVE
                     || msg == NativeMethods.WM_LBUTTONDOWN
                     || msg == NativeMethods.WM_RBUTTONDOWN
-                    || msg == NativeMethods.WM_MBUTTONDOWN)
+                    || msg == NativeMethods.WM_MBUTTONDOWN
+                    || msg == NativeMethods.WM_LBUTTONUP
+                    || msg == NativeMethods.WM_RBUTTONUP
+                    || msg == NativeMethods.WM_MBUTTONUP)
                 {
                     var data = (NativeMethods.MSLLHOOKSTRUCT)Marshal.PtrToStructure(
                         lParam, typeof(NativeMethods.MSLLHOOKSTRUCT));
@@ -125,9 +131,12 @@ namespace ClickForge
             MouseButton btn = MouseButton.Left;
             switch (msg)
             {
-                case NativeMethods.WM_LBUTTONDOWN: kind = StepKind.Click; btn = MouseButton.Left; break;
-                case NativeMethods.WM_RBUTTONDOWN: kind = StepKind.Click; btn = MouseButton.Right; break;
-                case NativeMethods.WM_MBUTTONDOWN: kind = StepKind.Click; btn = MouseButton.Middle; break;
+                case NativeMethods.WM_LBUTTONDOWN: kind = StepKind.Down; btn = MouseButton.Left; break;
+                case NativeMethods.WM_RBUTTONDOWN: kind = StepKind.Down; btn = MouseButton.Right; break;
+                case NativeMethods.WM_MBUTTONDOWN: kind = StepKind.Down; btn = MouseButton.Middle; break;
+                case NativeMethods.WM_LBUTTONUP: kind = StepKind.Up; btn = MouseButton.Left; break;
+                case NativeMethods.WM_RBUTTONUP: kind = StepKind.Up; btn = MouseButton.Right; break;
+                case NativeMethods.WM_MBUTTONUP: kind = StepKind.Up; btn = MouseButton.Middle; break;
                 case NativeMethods.WM_MOUSEMOVE: kind = StepKind.Move; break;
                 default: return null;
             }
@@ -156,7 +165,7 @@ namespace ClickForge
             _lastY = py;
             _haveLast = true;
             if (kind == StepKind.Move) { _moveCount++; _lastMoveTick = nowTick; }
-            else _clickCount++;
+            else if (kind == StepKind.Down) _clickCount++; // Up doesn't add a "click"
             return step;
         }
     }
@@ -167,8 +176,11 @@ namespace ClickForge
     {
         private Thread _thread;
         private volatile bool _stop;
+        private volatile bool _active;
 
-        public bool IsPlaying { get { return _thread != null && _thread.IsAlive; } }
+        // Set synchronously in Play() and cleared before Finished fires, so
+        // callers see a consistent state with no thread-start race.
+        public bool IsPlaying { get { return _active; } }
 
         // Both fire on the worker thread — marshal to the UI thread in handlers.
         public event Action<int> Progress;    // total clicks performed so far
@@ -176,12 +188,16 @@ namespace ClickForge
 
         public void Play(List<RecordedStep> steps, int repeatCount /* 0 = loop forever */)
         {
-            if (IsPlaying || steps == null || steps.Count == 0) return;
+            if (_active || steps == null || steps.Count == 0) return;
             RecordedStep[] plan = steps.ToArray();
             _stop = false;
+            _active = true;
             _thread = new Thread(delegate()
             {
                 int clicks = 0;
+                // Track which buttons we've pressed so a recording that ends
+                // mid-drag (or an early Stop) never leaves a button stuck down.
+                bool[] pressed = new bool[3];
                 try
                 {
                     int loops = 0;
@@ -193,18 +209,26 @@ namespace ClickForge
                             SleepInterruptible(s.DelayMs);
                             if (_stop) break;
                             InputSimulator.MoveTo(s.X, s.Y);
-                            if (s.Kind == StepKind.Click)
+                            if (s.Kind == StepKind.Down)
                             {
-                                InputSimulator.Click(s.Button, 15);
+                                InputSimulator.MouseDown(s.Button);
+                                MarkPressed(pressed, s.Button, true);
                                 clicks++;
                                 Action<int> p = Progress;
                                 if (p != null) p(clicks);
+                            }
+                            else if (s.Kind == StepKind.Up)
+                            {
+                                InputSimulator.MouseUp(s.Button);
+                                MarkPressed(pressed, s.Button, false);
                             }
                         }
                         loops++;
                     }
                 }
                 catch { }
+                ReleaseAll(pressed);
+                _active = false; // clear before Finished so handlers see a settled state
                 Action<string> f = Finished;
                 if (f != null) f(_stop ? "Playback stopped." : "Playback complete.");
             });
@@ -213,6 +237,24 @@ namespace ClickForge
         }
 
         public void Stop() { _stop = true; }
+
+        private static void MarkPressed(bool[] pressed, MouseButton b, bool down)
+        {
+            int i = (int)b;
+            if (i >= 0 && i < pressed.Length) pressed[i] = down;
+        }
+
+        private static void ReleaseAll(bool[] pressed)
+        {
+            for (int i = 0; i < pressed.Length; i++)
+            {
+                if (pressed[i])
+                {
+                    try { InputSimulator.MouseUp((MouseButton)i); }
+                    catch { }
+                }
+            }
+        }
 
         private void SleepInterruptible(int ms)
         {

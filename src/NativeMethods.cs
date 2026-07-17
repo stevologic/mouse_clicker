@@ -126,8 +126,11 @@ namespace ClickForge
         public const int HC_ACTION = 0;
         public const int WM_MOUSEMOVE = 0x0200;
         public const int WM_LBUTTONDOWN = 0x0201;
+        public const int WM_LBUTTONUP = 0x0202;
         public const int WM_RBUTTONDOWN = 0x0204;
+        public const int WM_RBUTTONUP = 0x0205;
         public const int WM_MBUTTONDOWN = 0x0207;
+        public const int WM_MBUTTONUP = 0x0208;
         public const uint LLMHF_INJECTED = 0x00000001;
 
         [StructLayout(LayoutKind.Sequential)]

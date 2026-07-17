@@ -15,7 +15,7 @@ Tons of options for **how** to click, **where** to move the cursor, and **when**
 - **Truly portable.** A single self-contained `.exe`. It runs on the .NET Framework that already ships with Windows — no installer, no admin rights, no 60 MB runtime bundle.
 - **Extremely configurable.** Every click button and type, randomized hold/interval timing, four positioning modes, and three cursor-movement styles including humanized curves.
 - **AI patterns, your choice of model.** Describe what you want in plain English and let **Claude, OpenAI, Gemini, Grok, or a lightweight local model** build the whole pattern. The local option runs fully offline via [Ollama](https://ollama.com) — no key, no cloud. Works with a built-in heuristic generator too.
-- **Record & replay.** Hit Record and use your mouse anywhere on screen — mouseclicker.app captures the **cursor movement and every click** (position, button, and timing), then replays the whole sequence a set number of times or on a loop.
+- **Record & replay.** Hit Record and use your mouse anywhere on screen — mouseclicker.app captures the **cursor movement, presses, and releases** (so **click-and-drag** works), with full timing, then replays the whole sequence a set number of times or on a loop.
 - **Live activity HUD.** While a run is active, a sleek floating popup shows a pulsing indicator and a live click counter — always on top and click-through, so it never gets in the way.
 - **A living interface.** A hand-built animated UI — a cursor-reactive particle constellation, an aurora backdrop, glassmorphism, and a glowing Start button — rendered entirely in GDI+. It idles to near-zero CPU when the window isn't in the foreground.
 - **Tiny & fast.** ~100 KB, native input via the Win32 `SendInput` API, precise sub-millisecond timing.
@@ -41,13 +41,15 @@ Tons of options for **how** to click, **where** to move the cursor, and **when**
 - Optional target jitter and return-to-origin
 
 ### Record & replay
-- **Record** your real mouse input system-wide — the **cursor movement path** (sampled) and **every click** (position, button, and the timing between events)
+- **Record** your real mouse input system-wide — the **cursor movement path** (sampled) plus every **press and release** with its button and timing
+- **Click-and-drag is supported** — presses and releases are captured separately, so playback reproduces drags, not just clicks
 - **Play back** the sequence a fixed number of times or on a **loop**, retracing the movement and reproducing the recorded pauses
-- Movement and clicks over the app's own window are ignored while recording, so the UI stays usable
-- **Send to Movement points** to hand the recorded clicks to the point-sequence engine
+- Input over the app's own window is ignored while recording, so the UI stays usable
+- **Send to Movement points** to hand the recorded press locations to the point-sequence engine
 - `F8` (or Stop) halts playback instantly
 
 ### Control
+- The big **Start** button (and `F6`) runs whatever the current tab is set up for — the configured clicker, or **playback of your recording** on the Record tab
 - System-wide **global hotkeys** (default `F6` = start/stop, `F8` = emergency stop) that work even in the background
 - Save and load named **profiles**
 - **Minimize to the system tray** to keep clicking in the background

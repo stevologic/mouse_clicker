@@ -221,10 +221,15 @@ namespace ClickForge
                 var vs = ScreenInfo.Virtual();
                 int cx = vs.Left + vs.Width / 2;
                 int cy = vs.Top + vs.Height / 2;
+                // A click at one point, then a click-and-drag to another: down,
+                // move, up — landing (and releasing) on the last point.
                 var steps = new System.Collections.Generic.List<RecordedStep>();
                 steps.Add(new RecordedStep { Kind = StepKind.Move, X = cx, Y = cy, DelayMs = 0 });
-                steps.Add(new RecordedStep { Kind = StepKind.Click, X = cx - 120, Y = cy, Button = MouseButton.Left, DelayMs = 20 });
-                steps.Add(new RecordedStep { Kind = StepKind.Click, X = cx + 120, Y = cy + 60, Button = MouseButton.Left, DelayMs = 40 });
+                steps.Add(new RecordedStep { Kind = StepKind.Down, X = cx - 120, Y = cy, Button = MouseButton.Left, DelayMs = 20 });
+                steps.Add(new RecordedStep { Kind = StepKind.Up, X = cx - 120, Y = cy, Button = MouseButton.Left, DelayMs = 20 });
+                steps.Add(new RecordedStep { Kind = StepKind.Down, X = cx, Y = cy + 30, Button = MouseButton.Left, DelayMs = 20 });
+                steps.Add(new RecordedStep { Kind = StepKind.Move, X = cx + 60, Y = cy + 45, DelayMs = 20 });
+                steps.Add(new RecordedStep { Kind = StepKind.Up, X = cx + 120, Y = cy + 60, Button = MouseButton.Left, DelayMs = 40 });
 
                 NativeMethods.POINT startPt = InputSimulator.GetCursor();
                 var player = new MacroPlayer();
@@ -390,9 +395,10 @@ namespace ClickForge
                     sugg == "Click like a human" && sugg.Length <= 28);
                 check("SuggestPresetName falls back on empty", MainForm.SuggestPresetName("  ") == "AI pattern");
 
-                // ---- MacroRecorder.Capture (movement + clicks) -------------
+                // ---- MacroRecorder.Capture (movement + down/up) ------------
                 int WM_MOVE = NativeMethods.WM_MOUSEMOVE;
                 int WM_L = NativeMethods.WM_LBUTTONDOWN;
+                int WM_LUP = NativeMethods.WM_LBUTTONUP;
                 int WM_R = NativeMethods.WM_RBUTTONDOWN;
 
                 var rec = new MacroRecorder();
@@ -401,13 +407,18 @@ namespace ClickForge
                 check("Capture ignores events over the app window",
                     rec.Capture(WM_L, 100, 100, false, true, 1000) == null && rec.Count == 0);
                 RecordedStep c1 = rec.Capture(WM_L, 300, 400, false, false, 1000);
-                check("Capture records a left click (first delay = 0)",
-                    c1 != null && c1.Kind == StepKind.Click && c1.Button == MouseButton.Left
+                check("Capture records a button DOWN (first delay = 0)",
+                    c1 != null && c1.Kind == StepKind.Down && c1.Button == MouseButton.Left
                     && c1.X == 300 && c1.Y == 400 && c1.DelayMs == 0);
+                RecordedStep cu = rec.Capture(WM_LUP, 340, 430, false, false, 1050);
+                check("Capture records a button UP (drag support)",
+                    cu != null && cu.Kind == StepKind.Up && cu.Button == MouseButton.Left
+                    && cu.X == 340 && cu.Y == 430 && cu.DelayMs == 50);
                 RecordedStep c2 = rec.Capture(WM_R, 310, 410, false, false, 1250);
-                check("Capture records a right click with the timing delta",
-                    c2 != null && c2.Button == MouseButton.Right && c2.DelayMs == 250);
-                check("Capture tallies clicks", rec.ClickCount == 2 && rec.MoveCount == 0);
+                check("Capture records a right press with the timing delta",
+                    c2 != null && c2.Kind == StepKind.Down && c2.Button == MouseButton.Right && c2.DelayMs == 200);
+                check("Capture tallies presses (down), not releases",
+                    rec.ClickCount == 2 && rec.MoveCount == 0 && rec.Count == 3);
 
                 var mv = new MacroRecorder();
                 RecordedStep m1 = mv.Capture(WM_MOVE, 0, 0, false, false, 5000);
