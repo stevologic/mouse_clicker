@@ -124,6 +124,7 @@ namespace ClickForge
 
         public const int WH_MOUSE_LL = 14;
         public const int HC_ACTION = 0;
+        public const int WM_MOUSEMOVE = 0x0200;
         public const int WM_LBUTTONDOWN = 0x0201;
         public const int WM_RBUTTONDOWN = 0x0204;
         public const int WM_MBUTTONDOWN = 0x0207;

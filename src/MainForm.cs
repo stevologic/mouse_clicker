@@ -10,7 +10,7 @@ namespace ClickForge
     public class MainForm : Form
     {
         private const string AppName = "mouseclicker.app";
-        private const string AppVersion = "3.3";
+        private const string AppVersion = "3.4";
 
         private Profile _profile;
         private readonly ClickEngine _engine = new ClickEngine();
@@ -116,6 +116,7 @@ namespace ClickForge
         private Label _recordCountLbl;
         private NumericUpDown _recordRepeat;
         private CheckBox _recordLoop;
+        private Timer _recordUiTimer;
         private ComboBox _toggleKeyCombo;
         private ComboBox _stopKeyCombo;
 
@@ -662,10 +663,11 @@ namespace ClickForge
         private Control BuildRecordPage()
         {
             FlowLayoutPanel s = Ui.Stack();
-            s.Controls.Add(Theme.SectionHeader("Record clicks"));
+            s.Controls.Add(Theme.SectionHeader("Record movement + clicks"));
             s.Controls.Add(Ui.Spacer(4));
-            Label rBlurb = Theme.Label("Press Record, then click anywhere on screen — each click is captured with its "
-                + "position, button, and timing. Clicks on this window are ignored, so you can still use it.", true);
+            Label rBlurb = Theme.Label("Press Record, then move and click anywhere on screen — the cursor path, "
+                + "each click's button, and the timing are all captured. Input over this window is ignored, "
+                + "so you can still use it. Press Record again (or F8) to stop.", true);
             rBlurb.MaximumSize = new Size(Ui.ContentWidth, 0);
             s.Controls.Add(rBlurb);
             s.Controls.Add(Ui.Spacer(8));
@@ -679,7 +681,7 @@ namespace ClickForge
             _recordStatus.AutoSize = true;
             s.Controls.Add(Ui.RowMulti("", _recordBtn, _recordStatus));
 
-            _recordCountLbl = Theme.Label("No clicks recorded yet.", true);
+            _recordCountLbl = Theme.Label("Nothing recorded yet.", true);
             _recordCountLbl.MaximumSize = new Size(Ui.ContentWidth, 0);
             s.Controls.Add(Ui.Row("", _recordCountLbl));
 
@@ -705,10 +707,21 @@ namespace ClickForge
             toPoints.Click += delegate { SendRecordingToPoints(); };
             s.Controls.Add(Ui.RowMulti("", _playBtn, clearRec, toPoints));
 
-            Label rHint = Theme.Label("Press F8 (or Stop) to halt playback at any time.", true);
+            Label rHint = Theme.Label("Playback retraces the movement and clicks. Press F8 (or Stop) to halt it.", true);
             s.Controls.Add(Ui.Row("", rHint));
 
-            _recorder.Changed += delegate { UiInvoke(UpdateRecordUi); };
+            // Refresh the live counts on a light timer rather than from the hook
+            // itself — the low-level hook proc must stay fast (it sees every
+            // system-wide mouse event while recording).
+            _recordUiTimer = new Timer();
+            _recordUiTimer.Interval = 150;
+            _recordUiTimer.Tick += delegate
+            {
+                UpdateRecordUi();
+                if (_recorder.IsRecording)
+                    _recordStatus.Text = "Recording… " + RecordSummary();
+            };
+
             _player.Progress += delegate(int n)
             {
                 UiInvoke(delegate { _recordStatus.Text = "Playing… " + n + (n == 1 ? " click" : " clicks"); });
@@ -718,6 +731,13 @@ namespace ClickForge
                 UiInvoke(delegate { _playBtn.Text = "▶  Play"; _recordStatus.ForeColor = Theme.Muted; _recordStatus.Text = reason; });
             };
             return s;
+        }
+
+        // "N clicks and M moves" with correct pluralization.
+        private string RecordSummary()
+        {
+            int c = _recorder.ClickCount, m = _recorder.MoveCount;
+            return c + (c == 1 ? " click" : " clicks") + " and " + m + (m == 1 ? " move" : " moves");
         }
 
         // ---- Record / playback -------------------------------------------
@@ -736,7 +756,8 @@ namespace ClickForge
             _recorder.Start(this);
             _recordBtn.Text = "■  Stop recording";
             _recordStatus.ForeColor = Theme.Accent;
-            _recordStatus.Text = "Recording… click anywhere";
+            _recordStatus.Text = "Recording… move or click anywhere";
+            if (_recordUiTimer != null) _recordUiTimer.Start();
             UpdateRecordUi();
         }
 
@@ -744,9 +765,10 @@ namespace ClickForge
         {
             if (!_recorder.IsRecording) return;
             _recorder.Stop();
+            if (_recordUiTimer != null) _recordUiTimer.Stop();
             _recordBtn.Text = "●  Record";
             _recordStatus.ForeColor = Theme.Muted;
-            _recordStatus.Text = _recorder.Count > 0 ? "Recorded " + _recorder.Count + " clicks" : "Nothing recorded";
+            _recordStatus.Text = _recorder.Count > 0 ? "Recorded " + RecordSummary() : "Nothing recorded";
             UpdateRecordUi();
         }
 
@@ -759,7 +781,7 @@ namespace ClickForge
             }
             if (_recorder.Count == 0)
             {
-                MessageBox.Show(this, "Record some clicks first.", AppName,
+                MessageBox.Show(this, "Record something first.", AppName,
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -782,9 +804,11 @@ namespace ClickForge
 
         private void SendRecordingToPoints()
         {
-            if (_recorder.Count == 0)
+            // The point-sequence engine clicks at each point, so only the
+            // recorded clicks are meaningful here (not the movement samples).
+            if (_recorder.ClickCount == 0)
             {
-                MessageBox.Show(this, "Record some clicks first.", AppName,
+                MessageBox.Show(this, "Record at least one click first.", AppName,
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -793,21 +817,21 @@ namespace ClickForge
             SyncToProfile();
             _profile.Points.Clear();
             foreach (RecordedStep st in _recorder.Steps)
-                _profile.Points.Add(new ClickPoint(st.X, st.Y));
+                if (st.Kind == StepKind.Click)
+                    _profile.Points.Add(new ClickPoint(st.X, st.Y));
             _profile.PositionMode = PositionMode.PointSequence;
             LoadToControls();
             SwitchPage("Movement");
             _statusLabel.ForeColor = Theme.Good;
-            _statusLabel.Text = "Loaded " + _recorder.Count + " recorded points";
+            _statusLabel.Text = "Loaded " + _profile.Points.Count + " recorded points";
         }
 
         private void UpdateRecordUi()
         {
             if (_recordCountLbl == null) return;
-            int n = _recorder.Count;
-            _recordCountLbl.Text = n == 0
-                ? "No clicks recorded yet."
-                : n + (n == 1 ? " click recorded." : " clicks recorded.");
+            _recordCountLbl.Text = _recorder.Count == 0
+                ? "Nothing recorded yet."
+                : RecordSummary() + " recorded.";
         }
 
         private Control BuildAiPage()
@@ -1878,6 +1902,7 @@ namespace ClickForge
             if (_hud != null) { try { _hud.End(); _hud.Dispose(); } catch { } }
             _engine.Stop();
             _player.Stop();
+            if (_recordUiTimer != null) _recordUiTimer.Stop();
             if (_recorder.IsRecording) _recorder.Stop();
             try { SyncToProfile(); ProfileStore.SaveConfig(_profile); }
             catch { }

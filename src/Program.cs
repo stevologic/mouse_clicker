@@ -222,8 +222,9 @@ namespace ClickForge
                 int cx = vs.Left + vs.Width / 2;
                 int cy = vs.Top + vs.Height / 2;
                 var steps = new System.Collections.Generic.List<RecordedStep>();
-                steps.Add(new RecordedStep { X = cx - 120, Y = cy, Button = MouseButton.Left, DelayMs = 0 });
-                steps.Add(new RecordedStep { X = cx + 120, Y = cy + 60, Button = MouseButton.Left, DelayMs = 40 });
+                steps.Add(new RecordedStep { Kind = StepKind.Move, X = cx, Y = cy, DelayMs = 0 });
+                steps.Add(new RecordedStep { Kind = StepKind.Click, X = cx - 120, Y = cy, Button = MouseButton.Left, DelayMs = 20 });
+                steps.Add(new RecordedStep { Kind = StepKind.Click, X = cx + 120, Y = cy + 60, Button = MouseButton.Left, DelayMs = 40 });
 
                 NativeMethods.POINT startPt = InputSimulator.GetCursor();
                 var player = new MacroPlayer();
@@ -388,6 +389,41 @@ namespace ClickForge
                 check("SuggestPresetName takes first words <= 28 chars",
                     sugg == "Click like a human" && sugg.Length <= 28);
                 check("SuggestPresetName falls back on empty", MainForm.SuggestPresetName("  ") == "AI pattern");
+
+                // ---- MacroRecorder.Capture (movement + clicks) -------------
+                int WM_MOVE = NativeMethods.WM_MOUSEMOVE;
+                int WM_L = NativeMethods.WM_LBUTTONDOWN;
+                int WM_R = NativeMethods.WM_RBUTTONDOWN;
+
+                var rec = new MacroRecorder();
+                check("Capture ignores injected events",
+                    rec.Capture(WM_L, 100, 100, true, false, 1000) == null && rec.Count == 0);
+                check("Capture ignores events over the app window",
+                    rec.Capture(WM_L, 100, 100, false, true, 1000) == null && rec.Count == 0);
+                RecordedStep c1 = rec.Capture(WM_L, 300, 400, false, false, 1000);
+                check("Capture records a left click (first delay = 0)",
+                    c1 != null && c1.Kind == StepKind.Click && c1.Button == MouseButton.Left
+                    && c1.X == 300 && c1.Y == 400 && c1.DelayMs == 0);
+                RecordedStep c2 = rec.Capture(WM_R, 310, 410, false, false, 1250);
+                check("Capture records a right click with the timing delta",
+                    c2 != null && c2.Button == MouseButton.Right && c2.DelayMs == 250);
+                check("Capture tallies clicks", rec.ClickCount == 2 && rec.MoveCount == 0);
+
+                var mv = new MacroRecorder();
+                RecordedStep m1 = mv.Capture(WM_MOVE, 0, 0, false, false, 5000);
+                RecordedStep m2 = mv.Capture(WM_MOVE, 40, 40, false, false, 5005); // +5ms
+                RecordedStep m3 = mv.Capture(WM_MOVE, 1, 1, false, false, 5030);   // <3px
+                RecordedStep m4 = mv.Capture(WM_MOVE, 40, 40, false, false, 5045);
+                check("Capture records movement", m1 != null && m1.Kind == StepKind.Move);
+                check("Capture throttles movement by interval", m2 == null);
+                check("Capture throttles movement by distance", m3 == null);
+                check("Capture records a distinct movement sample", m4 != null && m4.Kind == StepKind.Move);
+                check("Capture tallies moves", mv.MoveCount == 2 && mv.ClickCount == 0);
+
+                var capr = new MacroRecorder();
+                capr.Capture(WM_MOVE, 0, 0, false, false, 0);
+                RecordedStep big = capr.Capture(WM_L, 500, 500, false, false, 999999);
+                check("Capture caps huge idle gaps at 10000ms", big != null && big.DelayMs == 10000);
 
                 // ---- HumanMotion (moves the real cursor; restored below) ----
                 NativeMethods.POINT before = InputSimulator.GetCursor();
