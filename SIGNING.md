@@ -161,4 +161,15 @@ manually and may ask):
 > "Responsible use" notice that automation may be disallowed by some games and
 > services.
 
+**Proactively addressing keyboard recording** (the macro recorder can optionally
+capture keystrokes, which review may flag as keylogger-like):
+> The Record feature can capture keystrokes *only* when the user ticks an
+> off-by-default "Also record keystrokes" checkbox, so a recorded macro can
+> reproduce them. This is standard macro-recorder behavior (as in AutoHotkey,
+> Pulover's Macro Creator, etc.). Nothing is captured unless the user starts a
+> recording with that option on; the input stays entirely on the user's machine,
+> is only written to a local recording file the user chooses to save, and is
+> never transmitted anywhere. This is documented in the code-signing policy and
+> in-app.
+
 Once approved, follow the setup steps above.
